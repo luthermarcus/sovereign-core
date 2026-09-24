@@ -9,9 +9,9 @@ import psutil
 def load_config():
     path = os.path.expanduser("~/sovereign-ecosystem/config.json")
     default = {
-        "node_address": "stable_node_01", "node_profile": "FULL_ECOSYSTEM_VAULT",
+        "node_address": "interactive_node_01", "node_profile": "FULL_ECOSYSTEM_VAULT",
         "privacy_mode": "local_only", "encryption_mode": "aes_256_wal", "is_regtest": True,
-        "db_path": "~/node-stack/sovereign_stable.db", "poc_difficulty": 2, "micro_batch_threshold": 3, "dex_fee_percent": 0.3
+        "db_path": "~/node-stack/sovereign_interactive.db", "poc_difficulty": 2, "micro_batch_threshold": 3, "dex_fee_percent": 0.3
     }
     if os.path.exists(path):
         try:
@@ -92,7 +92,7 @@ class SovereignNode:
         with self.get_conn() as conn:
             conn.execute("UPDATE liquidity_pools SET reserve_a = ?, reserve_b = ? WHERE pool_id = 'FOX_SATS'", (new_a, new_b))
             conn.commit()
-        return {"amount_out": amount_out}
+        return {"amount_out": amount_out, "new_a": new_a, "new_b": new_b}
 
     def mine_depin_proof(self):
         try:
@@ -127,11 +127,3 @@ class SovereignNode:
             return {"status": "SECURE-OPTIMAL", "detail": f"AES-256 WAL Encrypted | Mode: {self.config['privacy_mode'].upper()}"}
         except Exception as e:
             return {"status": "DEGRADED", "detail": str(e)}
-
-    def developer_api_call(self, method, params=None):
-        if method == "get_balance":
-            return {"address": params.get("address"), "balance": self.get_balance(params.get("address"))}
-        elif method == "get_pool":
-            res_a, res_b, shares = self.get_pool_info()
-            return {"reserve_a": res_a, "reserve_b": res_b, "lp_shares": shares}
-        return {"error": "Unknown method"}
