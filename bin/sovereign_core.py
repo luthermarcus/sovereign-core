@@ -10,9 +10,10 @@ from collections import deque
 def load_config():
     config_path = os.path.expanduser("~/sovereign-ecosystem/config.json")
     default_config = {
-        "node_address": "terminal_master_node_01", "node_profile": "FULL_MINER_VALIDATOR",
-        "is_regtest": True, "db_path": "~/node-stack/regtest_ledger.db",
-        "poc_difficulty": 2, "micro_batch_threshold": 3, "network_mode": "edge_federation"
+        "node_address": "privacy_node_01", "node_profile": "SOVEREIGN_EDGE",
+        "privacy_mode": "local_only", "is_regtest": True,
+        "db_path": "~/node-stack/regtest_ledger.db",
+        "poc_difficulty": 2, "micro_batch_threshold": 3
     }
     if os.path.exists(config_path):
         try:
@@ -42,28 +43,11 @@ class HardwareTelemetry:
         except Exception:
             return {"tier": "EDGE_NODE", "cpu_pct": 0.0, "ram_used": 0, "ram_total": 4, "ram_pct": 0, "disk_free": 10, "disk_total": 50, "disk_pct": 50}
 
-class MicroStateBatcher:
-    def __init__(self, flush_threshold=3):
-        self.buffer = deque()
-        self.flush_threshold = flush_threshold
-
-    def add_transaction(self, sender, recipient, amount):
-        self.buffer.append({"sender": sender, "recipient": recipient, "amount": amount, "timestamp": time.time()})
-        if len(self.buffer) >= self.flush_threshold:
-            return self.flush()
-        return None
-
-    def flush(self):
-        batch = list(self.buffer)
-        self.buffer.clear()
-        return batch
-
 class SovereignNode:
     def __init__(self):
         self.config = load_config()
         self.db_path = os.path.expanduser(self.config["db_path"])
         os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
-        self.batcher = MicroStateBatcher(flush_threshold=self.config["micro_batch_threshold"])
         self.init_database()
 
     def get_conn(self):
@@ -89,50 +73,18 @@ class SovereignNode:
             row = cur.fetchone()
             return row[0] if row else 0.0
 
-    def mine_depin_proof(self):
-        """DePIN Mining Service: Solves CPU PoC puzzle and records proof."""
-        try:
-            os.nice(15) # Protect hardware thermal limits
-        except Exception:
-            pass
-        
-        difficulty = self.config["poc_difficulty"]
-        target = "0" * difficulty
-        nonce = 0
-        start_time = time.time()
-        
-        while nonce < 50000:
-            candidate = f"{self.config['node_address']}:{nonce}:{start_time}"
-            h = hashlib.sha256(candidate.encode()).hexdigest()
-            if h.startswith(target):
-                with self.get_conn() as conn:
-                    conn.execute("INSERT OR IGNORE INTO depin_proofs (hash, nonce, difficulty) VALUES (?, ?, ?)", (h, nonce, difficulty))
-                    conn.execute("UPDATE accounts SET balance = balance + 10.0 WHERE address = 'depin_pool'")
-                    conn.commit()
-                return {"status": "success", "hash": h, "nonce": nonce, "reward": 10.0}
-            nonce += 1
-        return {"status": "failed", "detail": "Mining round timeout."}
-
-    def process_wallet_transfer(self, sender, recipient, amount):
-        faucet_bal = self.get_balance(sender)
-        if faucet_bal < amount:
-            return {"status": "error", "detail": "Insufficient balance."}
-        
-        flushed_batch = self.batcher.add_transaction(sender, recipient, amount)
-        if flushed_batch:
-            with self.get_conn() as conn:
-                for tx in flushed_batch:
-                    conn.execute("UPDATE accounts SET balance = balance - ? WHERE address = ?", (tx['amount'], tx['sender']))
-                    conn.execute("INSERT INTO accounts (address, token, balance) VALUES (?, 'FOX', ?) ON CONFLICT(address) DO UPDATE SET balance = balance + ?", (tx['recipient'], tx['amount'], tx['amount']))
-                conn.commit()
-            return {"status": "batch_committed", "count": len(flushed_batch)}
-        return {"status": "buffered", "buffer_size": len(self.batcher.buffer)}
+    def set_privacy_mode(self, mode):
+        self.config["privacy_mode"] = mode
+        config_path = os.path.expanduser("~/sovereign-ecosystem/config.json")
+        with open(config_path, "w") as f:
+            json.dump(self.config, f, indent=2)
+        return mode
 
     def run_diagnostics(self):
         try:
             conn = sqlite3.connect(self.db_path)
             conn.execute("PRAGMA integrity_check;")
             conn.close()
-            return {"status": "OPTIMAL", "detail": "Ledger & Mining WAL Integrity Verified"}
+            return {"status": "OPTIMAL", "detail": f"Privacy Mode [{self.config['privacy_mode']}] Active & WAL Secure"}
         except Exception as e:
             return {"status": "DEGRADED", "detail": str(e)}

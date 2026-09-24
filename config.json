@@ -1,9 +1,9 @@
 {
-  "node_address": "terminal_master_node_01",
-  "node_profile": "FULL_MINER_VALIDATOR",
+  "node_address": "privacy_node_01",
+  "node_profile": "SOVEREIGN_EDGE",
+  "privacy_mode": "local_only",
   "is_regtest": true,
   "db_path": "~/node-stack/regtest_ledger.db",
   "poc_difficulty": 2,
-  "micro_batch_threshold": 3,
-  "network_mode": "edge_federation"
+  "micro_batch_threshold": 3
 }
