@@ -27,7 +27,7 @@ class SovereignTerminalUI(App):
         with Container():
             with Vertical(classes="card", id="metrics-box"):
                 yield Static(f"[bold green]📊 IoT Node Profile: {node.tier}[/bold green] ({node.tier_desc})")
-                yield Static(id="metrics-display", value="Initializing autonomous telemetry...")
+                yield Static("Initializing autonomous telemetry...", id="metrics-display")
             with Horizontal():
                 with Vertical(classes="card"):
                     yield Static("[bold green]🛡️ Autonomous IoT Controls[/bold green]")
