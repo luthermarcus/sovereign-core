@@ -3,7 +3,7 @@ import sys
 import os
 from textual.app import App, ComposeResult
 from textual.widgets import Header, Footer, Static, Button, RichLog
-from textual.containers import Container, Vertical, ScrollableContainer
+from textual.containers import ScrollableContainer, Vertical
 
 sys.path.append(os.path.dirname(__file__))
 from sovereign_core import SovereignNode
@@ -22,7 +22,7 @@ class SovereignTerminalUI(App):
     
     ScrollableContainer {
         height: 1fr;
-        scrollbar-gutter: stable;
+        width: 100%;
     }
 
     .card { 
@@ -43,27 +43,29 @@ class SovereignTerminalUI(App):
     Button.warning { background: #d97706; }
     
     #log-card {
-        height: 15;
+        height: 1fr;
+        min-height: 8;
     }
     """
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
         with ScrollableContainer():
-            # 1. Telemetry Card
+            # 1. Dynamic Hardware Profile Card
             with Vertical(classes="card", id="metrics-card"):
-                yield Static(f"[bold green]📊 Node Profile:[/bold green] {node.tier}")
+                yield Static(f"[bold green]📊 Hardware Profile:[/bold green] {node.tier}")
+                yield Static(f"Details: {node.tier_desc}")
                 yield Static("Faucet Reserve: Loading...", id="metrics-display")
             
-            # 2. Controls Card (Both buttons guaranteed visible via scrolling)
+            # 2. Adaptive Controls Card
             with Vertical(classes="card", id="controls-card"):
-                yield Static("[bold green]🛡️ IoT Quick Controls[/bold green]")
+                yield Static("[bold green]🛡️ Adaptive IoT Quick Controls[/bold green]")
                 yield Button("Simulate Fast Micro-Payment", id="btn-micro")
                 yield Button("Run Self-Healing Diagnostics", id="btn-heal", classes="warning")
             
-            # 3. System Log Card
+            # 3. Fluid System Log Card
             with Vertical(classes="card", id="log-card"):
-                yield Static("[bold green]💻 Autonomous System Log[/bold green]")
+                yield Static("[bold green]💻 Dynamic System Log[/bold green]")
                 yield RichLog(id="terminal-log", highlight=True, markup=True)
                 
         yield Footer()
@@ -71,9 +73,17 @@ class SovereignTerminalUI(App):
     def on_mount(self) -> None:
         self.update_metrics()
         log = self.query_one("#terminal-log", RichLog)
-        log.write("[green]>[/green] Sovereign Core v0.2.7-beta online.")
-        log.write(f"[green]>[/green] Hardware profile: [bold cyan]{node.tier}[/bold cyan]")
-        log.write("[green]>[/green] Scrollable mobile viewport initialized.")
+        log.write("[green]>[/green] Sovereign Core v0.2.8-beta online.")
+        log.write(f"[green]>[/green] Initial dimensions: {self.size.width} cols x {self.size.height} rows")
+        log.write(f"[green]>[/green] Hardware adaptation active: [bold cyan]{node.tier}[/bold cyan]")
+
+    def on_resize(self, event) -> None:
+        """Dynamically captures terminal dimension shifts when keyboards open/close."""
+        try:
+            log = self.query_one("#terminal-log", RichLog)
+            log.write(f"[dim]⚡ Viewport adjusted: {event.size.width}x{event.size.height}[/dim]")
+        except Exception:
+            pass
 
     def update_metrics(self) -> None:
         with node.get_conn() as conn:
