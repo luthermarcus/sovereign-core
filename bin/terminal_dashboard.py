@@ -3,7 +3,7 @@ import sys
 import os
 from textual.app import App, ComposeResult
 from textual.widgets import Header, Footer, Static, Button, RichLog
-from textual.containers import Container, Vertical
+from textual.containers import Container, Vertical, ScrollableContainer
 
 sys.path.append(os.path.dirname(__file__))
 from sovereign_core import SovereignNode
@@ -12,20 +12,26 @@ node = SovereignNode(is_regtest=True)
 
 class SovereignTerminalUI(App):
     CSS = """
-    Screen { background: #0f1115; color: #dcdcdc; layout: vertical; }
+    Screen { 
+        background: #0f1115; 
+        color: #dcdcdc; 
+        layout: vertical; 
+    }
     Header { background: #181b22; color: #4CAF50; text-style: bold; height: 3; }
     Footer { background: #181b22; color: #888; height: 3; }
     
+    ScrollableContainer {
+        height: 1fr;
+        scrollbar-gutter: stable;
+    }
+
     .card { 
         background: #181b22; 
         border: solid #2a2e39; 
         padding: 1; 
-        margin: 1 1 0 1; 
+        margin: 1; 
+        height: auto;
     }
-    
-    #metrics-card { height: 6; }
-    #controls-card { height: 8; }
-    #log-card { height: 1fr; min-height: 10; }
     
     Button { 
         margin-top: 1; 
@@ -35,23 +41,27 @@ class SovereignTerminalUI(App):
         height: 3;
     }
     Button.warning { background: #d97706; }
+    
+    #log-card {
+        height: 15;
+    }
     """
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
-        with Container():
-            # 1. Compact Telemetry Card
+        with ScrollableContainer():
+            # 1. Telemetry Card
             with Vertical(classes="card", id="metrics-card"):
                 yield Static(f"[bold green]📊 Node Profile:[/bold green] {node.tier}")
                 yield Static("Faucet Reserve: Loading...", id="metrics-display")
             
-            # 2. Full-Width Touch-Friendly Controls Card
+            # 2. Controls Card (Both buttons guaranteed visible via scrolling)
             with Vertical(classes="card", id="controls-card"):
                 yield Static("[bold green]🛡️ IoT Quick Controls[/bold green]")
                 yield Button("Simulate Fast Micro-Payment", id="btn-micro")
                 yield Button("Run Self-Healing Diagnostics", id="btn-heal", classes="warning")
             
-            # 3. Dedicated Expandable System Log Card
+            # 3. System Log Card
             with Vertical(classes="card", id="log-card"):
                 yield Static("[bold green]💻 Autonomous System Log[/bold green]")
                 yield RichLog(id="terminal-log", highlight=True, markup=True)
@@ -61,9 +71,9 @@ class SovereignTerminalUI(App):
     def on_mount(self) -> None:
         self.update_metrics()
         log = self.query_one("#terminal-log", RichLog)
-        log.write("[green]>[/green] Sovereign Core v0.2.6-beta online.")
+        log.write("[green]>[/green] Sovereign Core v0.2.7-beta online.")
         log.write(f"[green]>[/green] Hardware profile: [bold cyan]{node.tier}[/bold cyan]")
-        log.write("[green]>[/green] Responsive vertical mobile layout loaded.")
+        log.write("[green]>[/green] Scrollable mobile viewport initialized.")
 
     def update_metrics(self) -> None:
         with node.get_conn() as conn:
