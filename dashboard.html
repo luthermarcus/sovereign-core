@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Sovereign Core Terminal Wallet</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, monospace; background: #0c0e12; color: #d0d4dc; margin: 0; padding: 24px; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px; }
+        .card { background: #161922; border: 1px solid #262a36; border-radius: 8px; padding: 20px; }
+        h2 { font-size: 1.1rem; color: #4CAF50; margin-top: 0; border-bottom: 1px solid #262a36; padding-bottom: 10px; }
+        label { font-size: 0.85rem; color: #8e95a5; display: block; margin-top: 10px; }
+        input { width: 100%; box-sizing: border-box; background: #0f1117; border: 1px solid #333a4d; color: #fff; padding: 10px; border-radius: 4px; margin-top: 5px; }
+        button { background: #2563eb; color: #fff; border: none; padding: 10px; border-radius: 4px; font-weight: bold; cursor: pointer; width: 100%; margin-top: 14px; }
+        button:hover { background: #1d4ed8; }
+        button.secondary { background: #374151; }
+        button.warn { background: #d97706; }
+        .console { background: #050608; border: 1px solid #1f2430; border-radius: 6px; padding: 14px; font-family: monospace; font-size: 0.85rem; height: 160px; overflow-y: auto; color: #10b981; margin-top: 14px;}
+        .stat { font-size: 1.6rem; font-weight: bold; color: #fff; margin-top: 4px; }
+        canvas { background: #0f1117; border-radius: 6px; width: 100%; height: 140px; margin-top: 10px; }
+        .bounty-item { background: #0f1117; padding: 10px; border-radius: 4px; border-left: 3px solid #4CAF50; margin-bottom: 10px; font-size: 0.85rem; display: flex; justify-content: space-between; align-items: center;}
+    </style>
+</head>
+<body>
+    <h1 style="font-size: 1.4rem; border-bottom: 1px solid #262a36; padding-bottom: 12px; margin-top: 0;">Sovereign Core Dashboard (v0.2.1-beta)</h1>
+
+    <div class="grid">
+        <!-- Live Node Telemetry & Canvas Graph -->
+        <div class="card" style="grid-column: span 1 / -1; display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+            <div>
+                <h2>📊 Decentralization Topology & Ledger State</h2>
+                <div style="display: flex; gap: 40px;">
+                    <div><label>Treasury & Faucet</label><div class="stat" id="faucetBalance">--- FOX</div></div>
+                    <div><label>DePIN Yield Pool</label><div class="stat" id="depinBalance">--- FOX</div></div>
+                    <div><label>Verified PoC Blocks</label><div class="stat" id="verifiedProofs">---</div></div>
+                </div>
+            </div>
+            <div>
+                <canvas id="nodeGraph"></canvas>
+                <div style="text-align: center; font-size: 0.8rem; color: #8e95a5; margin-top: 5px;">Green = Edge Nodes | Amber = Centralized Relays</div>
+            </div>
+        </div>
+
+        <!-- Hardware PoC Mining Engine -->
+        <div class="card">
+            <h2>⚙️ DePIN Proof-of-Compute</h2>
+            <p style="font-size: 0.85rem; color: #8e95a5;">Computes SHA-256 nonces on host hardware. Emits 10 FOX.</p>
+            <button onclick="mineProof()">Mine Cryptographic PoC Block</button>
+            
+            <h2 style="margin-top: 20px; color: #d97706;">🧹 Storage Optimizer</h2>
+            <p style="font-size: 0.85rem; color: #8e95a5;">Vacuums the SQLite WAL and clears old state data to prevent hard drive bloat on 24/7 nodes.</p>
+            <button class="secondary" onclick="pruneLedger()">Prune Ledger (Reclaim Disk Space)</button>
+        </div>
+
+        <!-- 5/5/90 Revenue Settlement -->
+        <div class="card">
+            <h2>⚡ 5/5/90 Value Settlement & Tipping</h2>
+            <label>App Creator Address (NIP-05)</label>
+            <input type="text" id="creatorAddr" value="dev_market@nostr.hub">
+            <label>Transaction Volume (FOX)</label>
+            <input type="number" id="splitAmt" value="100">
+            <button class="secondary" onclick="executeSplit()">Execute 5/5/90 Split</button>
+        </div>
+
+        <!-- Air-Gapped PSBT Vault -->
+        <div class="card">
+            <h2>🔒 Hardware Wallet PSBT Vault</h2>
+            <label>Destination (Taproot bc1p...)</label>
+            <input type="text" id="psbtDest" value="bc1p09u3r28d...82k9">
+            <button class="secondary" onclick="buildPSBT()">Build BIP-174 PSBT</button>
+        </div>
+
+        <!-- Community Bounties -->
+        <div class="card" style="grid-column: span 1 / -1;">
+            <h2>🛠️ Developer Update Bounties (SIP Pipeline)</h2>
+            <div id="bountyList">Loading active proposals...</div>
+        </div>
+    </div>
+
+    <!-- Diagnostic Terminal -->
+    <div class="card" style="margin-top: 20px;">
+        <h2 style="display: flex; justify-content: space-between; align-items: center;">
+            💻 Terminal Output & Diagnostic Doctor
+            <button class="warn" style="width: auto; margin: 0; padding: 4px 10px;" onclick="runDoctor()">Run '--doctor'</button>
+        </h2>
+        <div class="console" id="termOutput">> System initialized. Connecting to daemon on 127.0.0.1:8545...</div>
+    </div>
+
+    <script>
+        const log = (msg) => {
+            const term = document.getElementById('termOutput');
+            term.innerHTML += `<div>> ${msg}</div>`;
+            term.scrollTop = term.scrollHeight;
+        };
+
+        function drawGraph(edge, central) {
+            const canvas = document.getElementById('nodeGraph');
+            const ctx = canvas.getContext('2d');
+            canvas.width = canvas.offsetWidth;
+            canvas.height = 140;
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            const total = edge + central;
+            const edgeWidth = (edge / total) * (canvas.width - 40);
+            const centralWidth = (central / total) * (canvas.width - 40);
+
+            ctx.fillStyle = '#4CAF50';
+            ctx.fillRect(20, 40, edgeWidth, 40);
+            ctx.fillStyle = '#ffffff';
+            ctx.fillText(`Edge: ${edge}`, 25, 65);
+
+            ctx.fillStyle = '#d97706';
+            ctx.fillRect(20 + edgeWidth, 40, centralWidth, 40);
+            ctx.fillStyle = '#ffffff';
+            ctx.fillText(`Relays: ${central}`, 20 + edgeWidth + 10, 65);
+        }
+
+        async function fetchMetrics() {
+            try {
+                const res = await fetch('http://127.0.0.1:8545/api/metrics');
+                const d = await res.json();
+                document.getElementById('faucetBalance').innerText = d.faucet_balance.toFixed(2) + ' FOX';
+                document.getElementById('depinBalance').innerText = d.depin_pool_balance.toFixed(2) + ' FOX';
+                document.getElementById('verifiedProofs').innerText = d.verified_proofs;
+                drawGraph(d.edge_nodes, d.centralized_nodes);
+            } catch (e) { log("<span style='color:#ef4444;'>Backend API offline. Run: python3 bin/dashboard_api.py</span>"); }
+        }
+
+        async function fetchBounties() {
+            try {
+                const res = await fetch('http://127.0.0.1:8545/api/bounties');
+                const list = await res.json();
+                document.getElementById('bountyList').innerHTML = list.map(b => 
+                    `<div class="bounty-item">
+                        <span><strong>${b.title}</strong> — Funded: ${b.funded} / ${b.target} FOX</span>
+                        <button style="width: auto; padding: 4px 10px; margin: 0;" onclick="pledgeBounty(${b.id})">+ Pledge 50</button>
+                    </div>`
+                ).join('');
+            } catch (e) {}
+        }
+
+        async function pledgeBounty(id) {
+            await fetch('http://127.0.0.1:8545/api/bounties/pledge', { method: 'POST', body: JSON.stringify({bounty_id: id, amount: 50.0}) });
+            log(`Pledged 50 FOX to bounty #${id}`);
+            fetchBounties();
+        }
+
+        async function mineProof() {
+            log("Computing SHA-256 PoC puzzle on host hardware...");
+            try {
+                const res = await fetch('http://127.0.0.1:8545/api/poc', { method: 'POST', body: JSON.stringify({node_id: 'local_edge_node'}) });
+                const d = await res.json();
+                log(`<span style='color:#10b981;'>PoC Mined! Nonce: ${d.nonce} | Hash: ${d.hash.slice(0, 16)}... (${d.duration_sec}s)</span>`);
+                fetchMetrics();
+            } catch (e) { log("Error submitting Proof-of-Compute."); }
+        }
+
+        async function pruneLedger() {
+            log("Vacuuming SQLite WAL and clearing stale state data...");
+            try {
+                const res = await fetch('http://127.0.0.1:8545/api/prune', { method: 'POST', body: JSON.stringify({keep_days: 7}) });
+                const d = await res.json();
+                log(`<span style='color:#10b981;'>Disk Optimized. Cleared ${d.cleared_records} stale records. SQLite VACUUM complete.</span>`);
+            } catch (e) { log("Error communicating with storage optimizer."); }
+        }
+
+        async function executeSplit() {
+            try {
+                const res = await fetch('http://127.0.0.1:8545/api/split', {
+                    method: 'POST', body: JSON.stringify({sender: 'genesis_faucet', creator: document.getElementById('creatorAddr').value, amount: document.getElementById('splitAmt').value})
+                });
+                const d = await res.json();
+                if (d.error) log(`<span style='color:#ef4444;'>Split Rejected: ${d.error}</span>`);
+                else { log(`Settled: Creator (+${d.creator_fee}) | Treasury (+${d.treasury_fee}) | DePIN (+${d.depin_reward})`); fetchMetrics(); }
+            } catch (e) { log("Error: Settlement failed."); }
+        }
+
+        async function buildPSBT() {
+            try {
+                const res = await fetch('http://127.0.0.1:8545/api/psbt', { method: 'POST', body: JSON.stringify({recipient: document.getElementById('psbtDest').value, amount: 25.0}) });
+                const d = await res.json();
+                log(`BIP-174 PSBT Generated: ${d.payload.slice(0, 32)}... Ready for MicroSD.`);
+            } catch (e) {}
+        }
+
+        async function runDoctor() {
+            log("Invoking NodeDoctor verification suite...");
+            try {
+                const res = await fetch('http://127.0.0.1:8545/api/doctor');
+                const d = await res.json();
+                d.checks.forEach(c => log(`${c.passed ? '✓' : '✗'} ${c.name}: ${c.detail}`));
+                log(`Diagnostic State: <strong>${d.status}</strong>`);
+            } catch (e) { log("Doctor failed: Daemon not responding on 8545."); }
+        }
+
+        fetchMetrics(); fetchBounties(); setInterval(fetchMetrics, 10000);
+    </script>
+</body>
+</html>
