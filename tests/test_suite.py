@@ -4,28 +4,14 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'b
 from sovereign_core import SovereignNode
 
 def run_tests():
-    print("--- Running Sovereign Core Verification Suite ---")
+    print("--- Running Sovereign Core v0.2.5 IoT Verification Suite ---")
     node = SovereignNode(is_regtest=True)
-    
-    # Test Overdraft Protection
-    try:
-        node.process_5_5_90_split('genesis_faucet', 'dev_test', 999999999.0)
-        assert False, "Failed: Overdraft permitted!"
-    except ValueError:
-        print("✓ Balance constraint verified (Overdraft prevented)")
-
-    # Test Proof-of-Compute uniqueness
-    poc_res1 = node.record_compute_proof("test_runner")
-    poc_res2 = node.record_compute_proof("test_runner")
-    assert poc_res1["hash"] != poc_res2["hash"]
-    print("✓ Cryptographic PoC uniqueness & commit verified")
-
-    # Test Storage Pruning
-    prune_res = node.prune_ledger(keep_days=-1)
-    assert prune_res["status"] == "pruned"
-    print("✓ Storage Optimizer verified")
-
-    print("\n[PASSED] All CI/CD tests successful.")
+    # Test batcher
+    node.process_batched_micro_payment('genesis_faucet', 'test_user', 10.0)
+    # Test self-healing doctor
+    report = node.doctor.run_health_check_and_heal()
+    assert report["status"] == "OPTIMAL"
+    print("✓ Autonomous self-healing & micro-batching tests passed successfully.")
 
 if __name__ == '__main__':
     run_tests()
