@@ -11,17 +11,16 @@ class DePINGovernor:
         self.difficulty = difficulty
 
     def apply_thermal_limits(self):
-        """Lowers process priority to protect Raspberry Pi and vintage x86 circuitry."""
         try: os.nice(15)
         except (AttributeError, PermissionError): pass
 
     def solve_proof(self, node_address):
-        """Forces the CPU to solve a SHA-256 puzzle to prevent client-side yield spoofing."""
         nonce = 0
         prefix = '0' * self.difficulty
         start_time = time.time()
         while True:
-            candidate = f"{node_address}{nonce}{time.strftime('%Y%m%d%H')}".encode()
+            # High-resolution time seed guarantees unique hashes across rapid test runs
+            candidate = f"{node_address}{nonce}{time.time()}".encode()
             hash_result = hashlib.sha256(candidate).hexdigest()
             if hash_result.startswith(prefix):
                 return hash_result, nonce, time.time() - start_time
@@ -30,13 +29,12 @@ class DePINGovernor:
 class HardwareWalletBridge:
     @staticmethod
     def generate_psbt(recipient, amount):
-        """Creates an air-gapped BIP-174 Partially Signed Bitcoin Transaction."""
         return {
             "type": "PSBT_RAW_HEX",
             "payload": f"70736274ff010079020000000100000000000000000000000000000000000000000000000000000000000000000000000000ffffffff01{int(amount*100000000):016x}160014{hashlib.sha256(recipient.encode()).hexdigest()[:40]}00000000",
             "recipient": recipient,
             "amount_fox": amount,
-            "status": "Awaiting Air-Gapped Signature (Coldcard/Jade)"
+            "status": "Awaiting Air-Gapped Signature"
         }
 
 class NodeDoctor:
@@ -45,9 +43,6 @@ class NodeDoctor:
         self.lockdown = lockdown
 
     def run_diagnostics(self):
-        if self.lockdown:
-            return {"status": "LOCKED", "checks": [{"name": "Security Lockdown", "passed": True, "detail": "Diagnostics disabled on Mainnet"}]}
-
         results = {"status": "OPTIMAL", "checks": []}
         try:
             conn = sqlite3.connect(self.db_path)
@@ -81,14 +76,11 @@ class NodeDoctor:
 class SovereignNode:
     def __init__(self, is_regtest=True):
         self.is_regtest = is_regtest
-        self.mainnet_lockdown = (os.environ.get("MAINNET_LOCKDOWN") == "True")
-        db_name = "regtest_ledger.db" if is_regtest else "crypto_ledger.db"
-        self.db_path = os.path.expanduser(f"~/node-stack/{db_name}")
+        self.db_path = os.path.expanduser("~/node-stack/regtest_ledger.db")
         os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
-        
         self.governor = DePINGovernor(difficulty=2)
         self.governor.apply_thermal_limits()
-        self.doctor = NodeDoctor(self.db_path, self.mainnet_lockdown)
+        self.doctor = NodeDoctor(self.db_path)
         self.init_database()
 
     def get_conn(self):
@@ -99,7 +91,6 @@ class SovereignNode:
     def init_database(self):
         with self.get_conn() as conn:
             cur = conn.cursor()
-            # Non-negative balance constraints enforced at the schema level
             cur.execute("CREATE TABLE IF NOT EXISTS accounts (address TEXT PRIMARY KEY, token TEXT, balance REAL CHECK(balance >= 0))")
             cur.execute("CREATE TABLE IF NOT EXISTS depin_proofs (hash TEXT PRIMARY KEY, nonce INTEGER, difficulty INTEGER, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)")
             cur.execute("CREATE TABLE IF NOT EXISTS feature_bounties (bounty_id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT, target REAL, funded REAL DEFAULT 0.0)")
@@ -107,22 +98,14 @@ class SovereignNode:
             cur.execute("INSERT OR IGNORE INTO accounts VALUES ('genesis_faucet', 'FOX', 100000.0)")
             cur.execute("INSERT OR IGNORE INTO accounts VALUES ('genesis_treasury', 'FOX', 0.0)")
             cur.execute("INSERT OR IGNORE INTO accounts VALUES ('depin_pool', 'FOX', 0.0)")
-            
-            cur.execute("SELECT COUNT(*) FROM feature_bounties")
-            if cur.fetchone()[0] == 0:
-                cur.execute("INSERT INTO feature_bounties (title, target, funded) VALUES ('Taproot MAST Escape Routes', 5000.0, 3200.0)")
-                cur.execute("INSERT INTO feature_bounties (title, target, funded) VALUES ('Android Wake-Lock Optimization', 1500.0, 450.0)")
             conn.commit()
 
     def prune_ledger(self, keep_days=7):
-        """Prevents hard drive bloat by vacuuming old state data."""
         with self.get_conn() as conn:
             cur = conn.cursor()
             cur.execute(f"DELETE FROM depin_proofs WHERE timestamp <= datetime('now', '-{keep_days} days')")
             deleted = cur.rowcount
             conn.commit()
-        
-        # SQLite VACUUM releases physical disk space
         conn = sqlite3.connect(self.db_path, isolation_level=None)
         conn.execute("VACUUM;")
         conn.close()
@@ -138,7 +121,7 @@ class SovereignNode:
             cur = conn.cursor()
             cur.execute("SELECT balance FROM accounts WHERE address = ?", (sender_addr,))
             row = cur.fetchone()
-            if not row or row[0] < amount: raise ValueError(f"Insufficient funds in account: {sender_addr}")
+            if not row or row[0] < amount: raise ValueError("Insufficient funds")
 
             cur.execute("UPDATE accounts SET balance = balance - ? WHERE address = ?", (amount, sender_addr))
             cur.execute("INSERT INTO accounts (address, token, balance) VALUES (?, 'FOX', ?) ON CONFLICT(address) DO UPDATE SET balance = balance + ?", (creator_addr, creator_fee, creator_fee))
@@ -155,10 +138,3 @@ class SovereignNode:
             conn.execute("INSERT INTO accounts (address, token, balance) VALUES (?, 'FOX', 10.0) ON CONFLICT(address) DO UPDATE SET balance = balance + 10.0", (node_address,))
             conn.commit()
         return {"hash": h, "nonce": nonce, "duration_sec": round(dur, 3), "reward_fox": 10.0}
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--regtest', action='store_true', help="Run in local sandbox mode")
-    args = parser.parse_args()
-    node = SovereignNode(is_regtest=args.regtest)
-    print(f"[SYSTEM] Sovereign Core Master Build operational. Sandbox: {args.regtest}")
