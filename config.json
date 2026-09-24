@@ -1,0 +1,8 @@
+{
+  "node_address": "terminal_node_01",
+  "is_regtest": true,
+  "db_path": "~/node-stack/regtest_ledger.db",
+  "poc_difficulty": 2,
+  "micro_batch_threshold": 3,
+  "network_mode": "edge_local"
+}
