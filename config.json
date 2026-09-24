@@ -1,9 +1,10 @@
 {
-  "node_address": "privacy_node_01",
-  "node_profile": "SOVEREIGN_EDGE",
+  "node_address": "dex_node_01",
+  "node_profile": "SOVEREIGN_DEX_HUB",
   "privacy_mode": "local_only",
   "is_regtest": true,
   "db_path": "~/node-stack/regtest_ledger.db",
   "poc_difficulty": 2,
-  "micro_batch_threshold": 3
+  "micro_batch_threshold": 3,
+  "dex_fee_percent": 0.3
 }
