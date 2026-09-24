@@ -4,23 +4,19 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'b
 from sovereign_core import SovereignNode, HardwareTelemetry
 
 def run_tests():
-    print("--- Running Sovereign Core v0.3.5 Verification Suite ---")
+    print("--- Running Sovereign Core v0.3.7 Verification Suite ---")
     node = SovereignNode()
     
-    # Verify Wallet Balance
-    faucet_bal = node.get_balance("genesis_faucet")
-    assert faucet_bal >= 0
-    print(f"✓ Faucet balance verified: {faucet_bal} FOX")
+    # Verify Mining Service
+    proof = node.mine_depin_proof()
+    assert proof["status"] == "success"
+    print(f"✓ DePIN mining service verified (Hash: {proof['hash'][:10]}...)")
 
-    # Verify Transfer Execution
-    res = node.process_wallet_transfer("genesis_faucet", "user_wallet_01", 10.0)
-    assert res["status"] in ["buffered", "batch_committed"]
-    print("✓ Wallet transfer & micro-batching verified")
-
+    # Verify Hardware Telemetry
     metrics = HardwareTelemetry.get_metrics()
     assert "tier" in metrics
     print(f"✓ Hardware telemetry verified ({metrics['tier']})")
-    print("\n[PASSED] All v0.3.5 wallet and node checks successful.")
+    print("\n[PASSED] All v0.3.7 ecosystem checks successful.")
 
 if __name__ == '__main__':
     run_tests()

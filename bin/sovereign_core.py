@@ -10,9 +10,9 @@ from collections import deque
 def load_config():
     config_path = os.path.expanduser("~/sovereign-ecosystem/config.json")
     default_config = {
-        "node_address": "terminal_wallet_node_01", "node_profile": "EDGE_WALLET_NODE",
+        "node_address": "terminal_master_node_01", "node_profile": "FULL_MINER_VALIDATOR",
         "is_regtest": True, "db_path": "~/node-stack/regtest_ledger.db",
-        "poc_difficulty": 2, "micro_batch_threshold": 3, "network_mode": "edge_local"
+        "poc_difficulty": 2, "micro_batch_threshold": 3, "network_mode": "edge_federation"
     }
     if os.path.exists(config_path):
         try:
@@ -89,11 +89,34 @@ class SovereignNode:
             row = cur.fetchone()
             return row[0] if row else 0.0
 
+    def mine_depin_proof(self):
+        """DePIN Mining Service: Solves CPU PoC puzzle and records proof."""
+        try:
+            os.nice(15) # Protect hardware thermal limits
+        except Exception:
+            pass
+        
+        difficulty = self.config["poc_difficulty"]
+        target = "0" * difficulty
+        nonce = 0
+        start_time = time.time()
+        
+        while nonce < 50000:
+            candidate = f"{self.config['node_address']}:{nonce}:{start_time}"
+            h = hashlib.sha256(candidate.encode()).hexdigest()
+            if h.startswith(target):
+                with self.get_conn() as conn:
+                    conn.execute("INSERT OR IGNORE INTO depin_proofs (hash, nonce, difficulty) VALUES (?, ?, ?)", (h, nonce, difficulty))
+                    conn.execute("UPDATE accounts SET balance = balance + 10.0 WHERE address = 'depin_pool'")
+                    conn.commit()
+                return {"status": "success", "hash": h, "nonce": nonce, "reward": 10.0}
+            nonce += 1
+        return {"status": "failed", "detail": "Mining round timeout."}
+
     def process_wallet_transfer(self, sender, recipient, amount):
-        # Enforce non-negative check & execute transfer
         faucet_bal = self.get_balance(sender)
         if faucet_bal < amount:
-            return {"status": "error", "detail": "Insufficient balance for transfer."}
+            return {"status": "error", "detail": "Insufficient balance."}
         
         flushed_batch = self.batcher.add_transaction(sender, recipient, amount)
         if flushed_batch:
@@ -110,6 +133,6 @@ class SovereignNode:
             conn = sqlite3.connect(self.db_path)
             conn.execute("PRAGMA integrity_check;")
             conn.close()
-            return {"status": "OPTIMAL", "detail": "Wallet Ledger & WAL Integrity Verified"}
+            return {"status": "OPTIMAL", "detail": "Ledger & Mining WAL Integrity Verified"}
         except Exception as e:
             return {"status": "DEGRADED", "detail": str(e)}

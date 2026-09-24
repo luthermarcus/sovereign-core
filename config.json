@@ -1,9 +1,9 @@
 {
-  "node_address": "terminal_wallet_node_01",
-  "node_profile": "EDGE_WALLET_NODE",
+  "node_address": "terminal_master_node_01",
+  "node_profile": "FULL_MINER_VALIDATOR",
   "is_regtest": true,
   "db_path": "~/node-stack/regtest_ledger.db",
   "poc_difficulty": 2,
   "micro_batch_threshold": 3,
-  "network_mode": "edge_local"
+  "network_mode": "edge_federation"
 }
