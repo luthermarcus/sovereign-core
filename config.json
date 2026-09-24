@@ -1,11 +1,10 @@
 {
-  "node_address": "secure_node_01",
-  "node_profile": "SECURE_EDGE_VAULT",
+  "node_address": "stable_node_01",
+  "node_profile": "FULL_ECOSYSTEM_VAULT",
   "privacy_mode": "local_only",
   "encryption_mode": "aes_256_wal",
-  "kdf_iterations": 32000,
   "is_regtest": true,
-  "db_path": "~/node-stack/secure_ledger.db",
+  "db_path": "~/node-stack/sovereign_stable.db",
   "poc_difficulty": 2,
   "micro_batch_threshold": 3,
   "dex_fee_percent": 0.3

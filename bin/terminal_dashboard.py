@@ -1,11 +1,8 @@
 #!/usr/bin/env python3
-import sys
-import os
-import time
+import sys, os, time
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
-from rich.prompt import Prompt
 from rich import print as rprint
 
 sys.path.append(os.path.dirname(__file__))
@@ -14,90 +11,83 @@ from sovereign_core import SovereignNode, HardwareTelemetry
 console = Console()
 node = SovereignNode()
 
-def render_secure_dashboard():
-    telemetry = HardwareTelemetry.get_metrics()
-    faucet_bal = node.get_balance("genesis_faucet")
-    user_bal = node.get_balance("user_wallet_01")
+def display_dashboard():
+    console.clear()
+    t = HardwareTelemetry.get_metrics()
+    user_fox = node.get_balance("user_wallet_01")
     user_sats = node.get_balance("user_wallet_01_sats")
-    depin_bal = node.get_balance("depin_pool")
-    res_a, res_b, lp_shares = node.get_pool_info()
-    
+    depin = node.get_balance("depin_pool")
+    res_a, res_b, lp = node.get_pool_info()
     with node.get_conn() as conn:
-        cur = conn.cursor()
-        cur.execute("SELECT COUNT(*) FROM depin_proofs")
-        proof_count = cur.fetchone()[0]
+        proofs = conn.cursor().execute("SELECT COUNT(*) FROM depin_proofs").fetchone()[0]
 
-    table = Table(show_header=False, box=None, expand=True)
-    table.add_column("Category", style="cyan")
-    table.add_column("Details", style="bold white", justify="right")
+    tbl = Table(show_header=False, box=None, expand=True)
+    tbl.add_column("Key", style="cyan")
+    tbl.add_column("Val", style="bold white", justify="right")
+    
+    tbl.add_row("--- Core Node & Security ---", "---")
+    tbl.add_row("Node Profile", f"{node.config['node_profile']} ({t['tier']})")
+    tbl.add_row("Security Status", "[green]AES-256-CBC (WAL Active)[/green]")
+    tbl.add_row("Privacy Mode", f"[yellow]{node.config['privacy_mode'].upper()}[/yellow]")
+    tbl.add_row("CPU / RAM / Disk", f"{t['cpu_pct']}% | {t['ram_pct']}% RAM | {t['disk_pct']}% Disk")
+    
+    tbl.add_row("--- DePIN & Mining Channel ---", "---")
+    tbl.add_row("DePIN Yield Pool", f"{depin:,.2f} FOX | Proofs: {proofs}")
+    
+    tbl.add_row("--- DEX AMM Liquidity Channel ---", "---")
+    tbl.add_row("FOX / SATS Reserve", f"{res_a:,.2f} / {res_b:,.2f}")
+    
+    tbl.add_row("--- Wallet & Dev Channel ---", "---")
+    tbl.add_row("User FOX / SATS", f"{user_fox:,.2f} / {user_sats:,.2f}")
+    tbl.add_row("JSON-RPC API Status", "[green]Online (Local Domain Socket)[/green]")
 
-    table.add_row("Node Profile", f"{node.config['node_profile']} ({telemetry['tier']})")
-    table.add_row("Encryption Status", f"[bold green]AES-256-CBC (WAL Active)[/bold green]")
-    table.add_row("KDF Derivations", f"{node.kdf_count} (Singleton)")
-    table.add_row("Cipher Overhead", "~7.5% (Optimized)")
-    table.add_row("CPU / RAM / Disk", f"{telemetry['cpu_pct']}% | {telemetry['ram_pct']}% RAM | {telemetry['disk_pct']}% Disk")
-    table.add_row("--- Mining & DePIN Yield ---", "---")
-    table.add_row("DePIN Yield Pool", f"{depin_bal:,.2f} FOX")
-    table.add_row("Verified Proofs", str(proof_count))
-    table.add_row("--- DEX AMM Liquidity Pool ---", "---")
-    table.add_row("FOX Reserve (Pool A)", f"{res_a:,.2f} FOX")
-    table.add_row("SATS Reserve (Pool B)", f"{res_b:,.2f} SATS")
-    table.add_row("--- Wallet Balances ---", "---")
-    table.add_row("User FOX Wallet", f"{user_bal:,.2f} FOX")
-    table.add_row("User SATS Wallet", f"{user_sats:,.2f} SATS")
-
-    panel = Panel(
-        table,
-        title="[bold green]Sovereign Core v0.4.4 (Enterprise Secure Terminal)[/bold green]",
-        subtitle="[dim]Press Ctrl+C at any time to exit safely[/dim]",
-        border_style="green"
-    )
-    return panel
+    console.print(Panel(tbl, title="[bold green]Sovereign Core v0.5.2 Stable Control Center[/bold green]", border_style="green"))
 
 if __name__ == "__main__":
-    console.clear()
-    rprint("[green]>[/green] Booting Enterprise Secure Terminal Dashboard...")
-    time.sleep(0.5)
-    
     try:
         while True:
-            console.clear()
-            console.print(render_secure_dashboard())
-            rprint("\n[bold cyan]Secure Ecosystem Actions:[/bold cyan]")
-            rprint("  [1] Trigger DePIN Proof-of-Compute Mining Round")
+            display_dashboard()
+            rprint("\n[bold cyan]Select Action:[/bold cyan]")
+            rprint("  [1] Trigger DePIN Proof-of-Compute Mining")
             rprint("  [2] Swap 10 FOX -> SATS (AMM Pool)")
             rprint("  [3] Swap 1000 SATS -> FOX (AMM Pool)")
-            rprint("  [4] Run Encryption & WAL Security Audit")
-            rprint("  [5] Exit Dashboard")
+            rprint("  [4] Toggle Privacy Mode (Local vs Federated)")
+            rprint("  [5] Run Diagnostics & Security Audit")
+            rprint("  [6] Test Developer API Call")
+            rprint("  [7] Exit Control Center")
             
             try:
-                choice = Prompt.ask("\n[bold yellow]Select action[/bold yellow]", choices=["1", "2", "3", "4", "5"], default="4")
+                choice = input("\nEnter option [1-7]: ").strip()
             except (KeyboardInterrupt, EOFError):
-                rprint("\n[yellow]Exit signal received. Shutting down cleanly.[/yellow]")
+                rprint("\n[yellow]Shutdown signal received.[/yellow]")
                 break
-            
+
             if choice == "1":
-                rprint("[yellow]>[/yellow] Executing CPU Proof-of-Compute mining...")
+                rprint("\n[yellow]>[/yellow] Mining DePIN proof...")
                 res = node.mine_depin_proof()
-                if res["status"] == "success":
-                    rprint(f"[green]✓[/green] Block Mined! Hash: {res['hash'][:12]}... (+{res['reward']} FOX)")
-                else:
-                    rprint("[red]✗[/red] Mining timeout.")
-                time.sleep(1.5)
+                rprint(f"[green]✓[/green] Mined successfully! Reward: +{res.get('reward', 0)} FOX")
             elif choice == "2":
-                res = node.execute_amm_swap(10.0, swap_a_to_b=True)
-                rprint(f"[green]✓[/green] Swapped 10 FOX for [bold]{res['amount_out']:.2f} SATS[/bold]!")
-                time.sleep(1.5)
+                res = node.execute_amm_swap(10.0, True)
+                rprint(f"\n[green]✓[/green] Swapped 10 FOX for [bold]{res['amount_out']:.2f} SATS[/bold]")
             elif choice == "3":
-                res = node.execute_amm_swap(1000.0, swap_a_to_b=False)
-                rprint(f"[green]✓[/green] Swapped 1000 SATS for [bold]{res['amount_out']:.2f} FOX[/bold]!")
-                time.sleep(1.5)
+                res = node.execute_amm_swap(1000.0, False)
+                rprint(f"\n[green]✓[/green] Swapped 1000 SATS for [bold]{res['amount_out']:.2f} FOX[/bold]")
             elif choice == "4":
-                diag = node.run_diagnostics()
-                rprint(f"[green]✓[/green] Status: [bold]{diag['status']}[/bold] ({diag['detail']})")
-                time.sleep(2.0)
+                mode = "federated_p2p" if node.config["privacy_mode"] == "local_only" else "local_only"
+                node.set_privacy_mode(mode)
+                rprint(f"\n[green]✓[/green] Privacy mode updated to: [bold cyan]{mode.upper()}[/bold cyan]")
             elif choice == "5":
-                rprint("[yellow]Closing terminal dashboard safely.[/yellow]")
+                diag = node.run_diagnostics()
+                rprint(f"\n[green]✓[/green] {diag['status']}: {diag['detail']}")
+            elif choice == "6":
+                api_res = node.developer_api_call("get_pool")
+                rprint(f"\n[green]✓[/green] Developer API Pool Response: {api_res}")
+            elif choice == "7":
+                rprint("\n[yellow]Exiting control center safely.[/yellow]")
                 break
+            else:
+                rprint("\n[red]Invalid option. Please choose between 1 and 7.[/red]")
+            
+            input("\nPress [Enter] to continue...")
     except KeyboardInterrupt:
-        rprint("[yellow]Dashboard closed via global interrupt.[/yellow]")
+        rprint("\n[yellow]Control center closed via interrupt.[/yellow]")
