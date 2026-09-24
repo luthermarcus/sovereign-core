@@ -25,35 +25,35 @@ def display_dashboard():
     tbl.add_column("Key", style="cyan")
     tbl.add_column("Val", style="bold white", justify="right")
     
-    tbl.add_row("--- Core Node & Security ---", "---")
+    tbl.add_row("--- 🔒 Core Node & Security ---", "---")
     tbl.add_row("Node Profile", f"{node.config['node_profile']} ({t['tier']})")
     tbl.add_row("Security Status", "[green]AES-256-CBC (WAL Active)[/green]")
-    tbl.add_row("Privacy Mode", f"[yellow]{node.config['privacy_mode'].upper()}[/yellow]")
+    tbl.add_row("Privacy Posture", f"[yellow]{node.config['privacy_mode'].upper()}[/yellow]")
     tbl.add_row("CPU / RAM / Disk", f"{t['cpu_pct']}% | {t['ram_pct']}% RAM | {t['disk_pct']}% Disk")
     
-    tbl.add_row("--- DePIN & Mining Channel ---", "---")
+    tbl.add_row("--- ⛏ DePIN & Mining Channel ---", "---")
     tbl.add_row("DePIN Yield Pool", f"{depin:,.2f} FOX | Proofs: {proofs}")
     
-    tbl.add_row("--- DEX AMM Liquidity Channel ---", "---")
+    tbl.add_row("--- ◈ DEX AMM Liquidity Channel ---", "---")
     tbl.add_row("FOX / SATS Reserve", f"{res_a:,.2f} / {res_b:,.2f}")
     
-    tbl.add_row("--- Wallet & Dev Channel ---", "---")
+    tbl.add_row("--- ₿ Wallet & Settlement Layer ---", "---")
     tbl.add_row("User FOX / SATS", f"{user_fox:,.2f} / {user_sats:,.2f}")
-    tbl.add_row("Prompt Assistant Mode", "[cyan]Ready (Type '/' for commands)[/cyan]")
+    tbl.add_row("JSON-RPC IPC Bridge", "[green]Active (.sock Domain Socket)[/green]")
 
-    console.print(Panel(tbl, title="[bold green]Sovereign Core v0.5.3 Interactive Control Center[/bold green]", border_style="green"))
+    console.print(Panel(tbl, title="[bold green]Sovereign Core v0.6.0 Master Control Center[/bold green]", border_style="green"))
 
 if __name__ == "__main__":
     try:
         while True:
             display_dashboard()
-            rprint("\n[bold cyan]Developer & Node Channels:[/bold cyan]")
-            rprint("  [1] ⛏️  Trigger DePIN Mining Round")
-            rprint("  [2] 💱 Swap 10 FOX -> SATS (AMM DEX)")
-            rprint("  [3] 💱 Swap 1000 SATS -> FOX (AMM DEX)")
+            rprint("\n[bold cyan]Ecosystem Channels & Actions:[/bold cyan]")
+            rprint("  [1] ⛏  Trigger DePIN Proof-of-Compute Mining")
+            rprint("  [2] ◈  Swap 10 FOX -> SATS (AMM DEX)")
+            rprint("  [3] ◈  Swap 1000 SATS -> FOX (AMM DEX)")
             rprint("  [4] 🔒 Toggle Privacy Mode (Local vs Federated)")
-            rprint("  [5] 🛠️  Run Diagnostics & Security Audit")
-            rprint("  [6] 💬 Open Prompt Assistant (Command Palette)")
+            rprint("  [5] 🛡  Run Diagnostics & Security Audit")
+            rprint("  [6] 💬 Open Prompt Assistant (/help)")
             rprint("  [7] 🚪 Exit Control Center")
             
             try:
@@ -62,15 +62,14 @@ if __name__ == "__main__":
                 rprint("\n[yellow]Shutdown signal received.[/yellow]")
                 break
 
-            # Handle Prompt Assistant / Natural Commands starting with '/'
             if choice.startswith("/"):
                 parts = choice.split()
                 cmd = parts[0].lower()
                 if cmd == "/help":
-                    rprint("\n[cyan]Available Prompt Assistant Commands:[/cyan]")
+                    rprint("\n[cyan]Crypto Prompt Assistant Commands:[/cyan]")
                     rprint("  /mine          - Execute DePIN PoC mining")
                     rprint("  /swap <amount> - Swap FOX to SATS")
-                    rprint("  /balance       - Check wallet balances")
+                    rprint("  /balance       - Check self-custody balances")
                     rprint("  /audit         - Run security diagnostics")
                 elif cmd == "/mine":
                     res = node.mine_depin_proof()

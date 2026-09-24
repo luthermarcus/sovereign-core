@@ -9,9 +9,10 @@ import psutil
 def load_config():
     path = os.path.expanduser("~/sovereign-ecosystem/config.json")
     default = {
-        "node_address": "interactive_node_01", "node_profile": "FULL_ECOSYSTEM_VAULT",
+        "node_address": "rpc_master_node_01", "node_profile": "FULL_ECOSYSTEM_VAULT",
         "privacy_mode": "local_only", "encryption_mode": "aes_256_wal", "is_regtest": True,
-        "db_path": "~/node-stack/sovereign_interactive.db", "poc_difficulty": 2, "micro_batch_threshold": 3, "dex_fee_percent": 0.3
+        "db_path": "~/node-stack/sovereign_rpc.db", "socket_path": "~/sovereign-ecosystem/sockets/node.sock",
+        "poc_difficulty": 2, "micro_batch_threshold": 3, "dex_fee_percent": 0.3
     }
     if os.path.exists(path):
         try:
@@ -92,7 +93,7 @@ class SovereignNode:
         with self.get_conn() as conn:
             conn.execute("UPDATE liquidity_pools SET reserve_a = ?, reserve_b = ? WHERE pool_id = 'FOX_SATS'", (new_a, new_b))
             conn.commit()
-        return {"amount_out": amount_out, "new_a": new_a, "new_b": new_b}
+        return {"amount_out": amount_out}
 
     def mine_depin_proof(self):
         try:
@@ -127,3 +128,24 @@ class SovereignNode:
             return {"status": "SECURE-OPTIMAL", "detail": f"AES-256 WAL Encrypted | Mode: {self.config['privacy_mode'].upper()}"}
         except Exception as e:
             return {"status": "DEGRADED", "detail": str(e)}
+
+    def handle_rpc_request(self, request_data):
+        try:
+            req = json.loads(request_data)
+            method = req.get("method")
+            params = req.get("params", {})
+            req_id = req.get("id", 1)
+
+            if method == "get_balance":
+                res = self.get_balance(params.get("address", "user_wallet_01"))
+                return json.dumps({"jsonrpc": "2.0", "result": {"balance": res}, "id": req_id})
+            elif method == "get_pool":
+                res_a, res_b, shares = self.get_pool_info()
+                return json.dumps({"jsonrpc": "2.0", "result": {"reserve_a": res_a, "reserve_b": res_b, "lp_shares": shares}, "id": req_id})
+            elif method == "swap":
+                out = self.execute_amm_swap(params.get("amount", 10.0), params.get("swap_a_to_b", True))
+                return json.dumps({"jsonrpc": "2.0", "result": out, "id": req_id})
+            else:
+                return json.dumps({"jsonrpc": "2.0", "error": {"code": -32601, "message": "Method not found"}, "id": req_id})
+        except Exception as e:
+            return json.dumps({"jsonrpc": "2.0", "error": {"code": -32603, "message": str(e)}, "id": 1})

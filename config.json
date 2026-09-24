@@ -1,10 +1,11 @@
 {
-  "node_address": "interactive_node_01",
+  "node_address": "rpc_master_node_01",
   "node_profile": "FULL_ECOSYSTEM_VAULT",
   "privacy_mode": "local_only",
   "encryption_mode": "aes_256_wal",
   "is_regtest": true,
-  "db_path": "~/node-stack/sovereign_interactive.db",
+  "db_path": "~/node-stack/sovereign_rpc.db",
+  "socket_path": "~/sovereign-ecosystem/sockets/node.sock",
   "poc_difficulty": 2,
   "micro_batch_threshold": 3,
   "dex_fee_percent": 0.3
