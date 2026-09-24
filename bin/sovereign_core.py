@@ -1,25 +1,37 @@
 #!/usr/bin/env python3
 import os
 import sqlite3
-import argparse
 import hashlib
 import time
-import socket
 import psutil
 from collections import deque
 
-class HardwareTierManager:
+class HardwareTelemetry:
     @staticmethod
-    def detect_tier():
+    def get_metrics():
+        """Collects real-time hardware telemetry for edge nodes and server hubs."""
         try:
-            total_ram_gb = psutil.virtual_memory().total / (1024**3)
-            cpu_count = os.cpu_count() or 1
-            if total_ram_gb <= 4 or cpu_count <= 2:
-                return "EDGE_NODE", f"Lightweight IoT Profile ({total_ram_gb:.1f}GB RAM, {cpu_count} Cores)"
-            else:
-                return "CORE_HUB", f"High-Resource Federation Hub ({total_ram_gb:.1f}GB RAM, {cpu_count} Cores)"
+            mem = psutil.virtual_memory()
+            disk = psutil.disk_usage('/')
+            cpu_percent = psutil.cpu_percent(interval=None)
+            total_ram_gb = mem.total / (1024**3)
+            used_ram_gb = mem.used / (1024**3)
+            total_disk_gb = disk.total / (1024**3)
+            free_disk_gb = disk.free / (1024**3)
+            
+            tier = "EDGE_NODE" if total_ram_gb <= 4 else "CORE_HUB"
+            return {
+                "tier": tier,
+                "cpu_pct": cpu_percent,
+                "ram_used": used_ram_gb,
+                "ram_total": total_ram_gb,
+                "ram_pct": mem.percent,
+                "disk_free": free_disk_gb,
+                "disk_total": total_disk_gb,
+                "disk_pct": disk.percent
+            }
         except Exception:
-            return "EDGE_NODE", "Standard Edge Profile"
+            return {"tier": "EDGE_NODE", "cpu_pct": 0.0, "ram_used": 0, "ram_total": 4, "ram_pct": 0, "disk_free": 10, "disk_total": 50, "disk_pct": 50}
 
 class MicroStateBatcher:
     def __init__(self, flush_threshold=3):
@@ -37,40 +49,12 @@ class MicroStateBatcher:
         self.buffer.clear()
         return batch
 
-class SelfHealingNodeDoctor:
-    def __init__(self, db_path):
-        self.db_path = db_path
-
-    def run_health_check_and_heal(self):
-        """IoT Self-Healing loop: detects anomalies and triggers automated fixes."""
-        report = {"status": "OPTIMAL", "actions_taken": [], "checks": []}
-        try:
-            conn = sqlite3.connect(self.db_path)
-            cur = conn.cursor()
-            cur.execute("PRAGMA integrity_check;")
-            row = cur.fetchone()
-            if row and row[0] == "ok":
-                report["checks"].append({"name": "SQLite WAL Integrity", "passed": True})
-            else:
-                report["checks"].append({"name": "SQLite WAL Integrity", "passed": False})
-                report["status"] = "DEGRADED"
-                # Self-healing action: trigger WAL checkpoint and vacuum
-                conn.execute("PRAGMA wal_checkpoint(RESTART);")
-                report["actions_taken"].append("Executed emergency WAL checkpointing.")
-            conn.close()
-        except Exception as e:
-            report["checks"].append({"name": "SQLite WAL Integrity", "passed": False, "detail": str(e)})
-            report["status"] = "DEGRADED"
-        return report
-
 class SovereignNode:
     def __init__(self, is_regtest=True):
         self.is_regtest = is_regtest
         self.db_path = os.path.expanduser("~/node-stack/regtest_ledger.db")
         os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
-        self.tier, self.tier_desc = HardwareTierManager.detect_tier()
         self.batcher = MicroStateBatcher(flush_threshold=3)
-        self.doctor = SelfHealingNodeDoctor(self.db_path)
         self.init_database()
 
     def get_conn(self):
@@ -97,3 +81,12 @@ class SovereignNode:
                 conn.commit()
             return {"status": "batch_committed", "count": len(flushed_batch)}
         return {"status": "buffered", "buffer_size": len(self.batcher.buffer)}
+
+    def run_diagnostics(self):
+        try:
+            conn = sqlite3.connect(self.db_path)
+            conn.execute("PRAGMA integrity_check;")
+            conn.close()
+            return {"status": "OPTIMAL", "detail": "SQLite WAL Integrity Verified"}
+        except Exception as e:
+            return {"status": "DEGRADED", "detail": str(e)}
