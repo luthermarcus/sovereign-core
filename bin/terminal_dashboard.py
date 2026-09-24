@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import sys, os, time
+import sys, os, time, json
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
@@ -39,9 +39,9 @@ def display_dashboard():
     
     tbl.add_row("--- ₿ Wallet & Settlement Layer ---", "---")
     tbl.add_row("User FOX / SATS", f"{user_fox:,.2f} / {user_sats:,.2f}")
-    tbl.add_row("JSON-RPC IPC Bridge", "[green]Active (.sock Domain Socket)[/green]")
+    tbl.add_row("Rotating Logger", "[green]Active (~/sovereign-ecosystem/logs/node.log)[/green]")
 
-    console.print(Panel(tbl, title="[bold green]Sovereign Core v0.6.0 Master Control Center[/bold green]", border_style="green"))
+    console.print(Panel(tbl, title="[bold green]Sovereign Core v0.6.1 Control Center & Test Hub[/bold green]", border_style="green"))
 
 if __name__ == "__main__":
     try:
@@ -51,7 +51,7 @@ if __name__ == "__main__":
             rprint("  [1] ⛏  Trigger DePIN Proof-of-Compute Mining")
             rprint("  [2] ◈  Swap 10 FOX -> SATS (AMM DEX)")
             rprint("  [3] ◈  Swap 1000 SATS -> FOX (AMM DEX)")
-            rprint("  [4] 🔒 Toggle Privacy Mode (Local vs Federated)")
+            rprint("  [4] 🧪 Run Automated E2E Test Suite")
             rprint("  [5] 🛡  Run Diagnostics & Security Audit")
             rprint("  [6] 💬 Open Prompt Assistant (/help)")
             rprint("  [7] 🚪 Exit Control Center")
@@ -99,15 +99,14 @@ if __name__ == "__main__":
                 res = node.execute_amm_swap(1000.0, False)
                 rprint(f"\n[green]✓[/green] Swapped 1000 SATS for [bold]{res['amount_out']:.2f} FOX[/bold]")
             elif choice == "4":
-                mode = "federated_p2p" if node.config["privacy_mode"] == "local_only" else "local_only"
-                node.set_privacy_mode(mode)
-                rprint(f"\n[green]✓[/green] Privacy mode updated to: [bold cyan]{mode.upper()}[/bold cyan]")
+                rprint("\n[yellow]>[/yellow] Executing Automated E2E Test Suite...")
+                import subprocess
+                subprocess.run([sys.executable, "tests/test_suite.py"])
             elif choice == "5":
                 diag = node.run_diagnostics()
                 rprint(f"\n[green]✓[/green] {diag['status']}: {diag['detail']}")
             elif choice == "6":
                 rprint("\n[cyan]💬 Prompt Assistant Mode Activated![/cyan]")
-                rprint("Type commands like [bold]/mine[/bold], [bold]/swap 50[/bold], [bold]/balance[/bold], or [bold]/help[/bold]:")
                 p_cmd = input("prompt> ").strip()
                 if p_cmd.startswith("/help"):
                     rprint("Commands: /mine, /swap <amt>, /balance, /audit")

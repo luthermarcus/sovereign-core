@@ -5,14 +5,16 @@ import sqlite3
 import hashlib
 import time
 import psutil
+import logging
+from logging.handlers import RotatingFileHandler
 
 def load_config():
     path = os.path.expanduser("~/sovereign-ecosystem/config.json")
     default = {
-        "node_address": "rpc_master_node_01", "node_profile": "FULL_ECOSYSTEM_VAULT",
+        "node_address": "test_master_node_01", "node_profile": "FULL_ECOSYSTEM_VAULT",
         "privacy_mode": "local_only", "encryption_mode": "aes_256_wal", "is_regtest": True,
-        "db_path": "~/node-stack/sovereign_rpc.db", "socket_path": "~/sovereign-ecosystem/sockets/node.sock",
-        "poc_difficulty": 2, "micro_batch_threshold": 3, "dex_fee_percent": 0.3
+        "db_path": "~/node-stack/sovereign_test.db", "socket_path": "~/sovereign-ecosystem/sockets/node.sock",
+        "log_path": "~/sovereign-ecosystem/logs/node.log", "poc_difficulty": 2, "micro_batch_threshold": 3, "dex_fee_percent": 0.3
     }
     if os.path.exists(path):
         try:
@@ -21,6 +23,20 @@ def load_config():
         except Exception:
             return default
     return default
+
+def setup_logger():
+    config = load_config()
+    log_file = os.path.expanduser(config["log_path"])
+    os.makedirs(os.path.dirname(log_file), exist_ok=True)
+    
+    logger = logging.getLogger("SovereignCore")
+    logger.setLevel(logging.INFO)
+    if not logger.handlers:
+        handler = RotatingFileHandler(log_file, maxBytes=1024*1024, backupCount=3)
+        formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(message)s')
+        handler.setFormatter(formatter)
+        logger.addHandler(handler)
+    return logger
 
 class HardwareTelemetry:
     @staticmethod
@@ -43,10 +59,12 @@ class HardwareTelemetry:
 class SovereignNode:
     def __init__(self):
         self.config = load_config()
+        self.logger = setup_logger()
         self.db_path = os.path.expanduser(self.config["db_path"])
         os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
         self.kdf_count = 1
         self.init_database()
+        self.logger.info("SovereignNode initialized successfully with SQLite WAL & Rotating Logger.")
 
     def get_conn(self):
         conn = sqlite3.connect(self.db_path)
@@ -93,6 +111,7 @@ class SovereignNode:
         with self.get_conn() as conn:
             conn.execute("UPDATE liquidity_pools SET reserve_a = ?, reserve_b = ? WHERE pool_id = 'FOX_SATS'", (new_a, new_b))
             conn.commit()
+        self.logger.info(f"AMM Swap executed: In={amount_in}, Out={amount_out:.2f}")
         return {"amount_out": amount_out}
 
     def mine_depin_proof(self):
@@ -110,6 +129,7 @@ class SovereignNode:
                     conn.execute("INSERT OR IGNORE INTO depin_proofs (hash, nonce, difficulty) VALUES (?, ?, ?)", (h, nonce, diff))
                     conn.execute("UPDATE accounts SET balance = balance + 10.0 WHERE address = 'depin_pool'")
                     conn.commit()
+                self.logger.info(f"DePIN proof mined successfully: {h[:12]}")
                 return {"status": "success", "hash": h, "reward": 10.0}
         return {"status": "failed"}
 
@@ -118,6 +138,7 @@ class SovereignNode:
         path = os.path.expanduser("~/sovereign-ecosystem/config.json")
         with open(path, "w") as f:
             json.dump(self.config, f, indent=2)
+        self.logger.info(f"Privacy mode updated to: {mode}")
         return mode
 
     def run_diagnostics(self):
@@ -125,8 +146,10 @@ class SovereignNode:
             conn = sqlite3.connect(self.db_path)
             conn.execute("PRAGMA integrity_check;")
             conn.close()
+            self.logger.info("Diagnostics audit passed: WAL database integrity verified.")
             return {"status": "SECURE-OPTIMAL", "detail": f"AES-256 WAL Encrypted | Mode: {self.config['privacy_mode'].upper()}"}
         except Exception as e:
+            self.logger.error(f"Diagnostics failed: {str(e)}")
             return {"status": "DEGRADED", "detail": str(e)}
 
     def handle_rpc_request(self, request_data):
