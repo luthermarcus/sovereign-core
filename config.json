@@ -1,5 +1,6 @@
 {
-  "node_address": "terminal_node_01",
+  "node_address": "terminal_wallet_node_01",
+  "node_profile": "EDGE_WALLET_NODE",
   "is_regtest": true,
   "db_path": "~/node-stack/regtest_ledger.db",
   "poc_difficulty": 2,

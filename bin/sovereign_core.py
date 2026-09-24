@@ -10,12 +10,9 @@ from collections import deque
 def load_config():
     config_path = os.path.expanduser("~/sovereign-ecosystem/config.json")
     default_config = {
-        "node_address": "terminal_node_01",
-        "is_regtest": True,
-        "db_path": "~/node-stack/regtest_ledger.db",
-        "poc_difficulty": 2,
-        "micro_batch_threshold": 3,
-        "network_mode": "edge_local"
+        "node_address": "terminal_wallet_node_01", "node_profile": "EDGE_WALLET_NODE",
+        "is_regtest": True, "db_path": "~/node-stack/regtest_ledger.db",
+        "poc_difficulty": 2, "micro_batch_threshold": 3, "network_mode": "edge_local"
     }
     if os.path.exists(config_path):
         try:
@@ -72,6 +69,7 @@ class SovereignNode:
     def get_conn(self):
         conn = sqlite3.connect(self.db_path)
         conn.execute("PRAGMA journal_mode = WAL;")
+        conn.execute("PRAGMA busy_timeout = 5000;")
         return conn
 
     def init_database(self):
@@ -81,9 +79,22 @@ class SovereignNode:
             cur.execute("CREATE TABLE IF NOT EXISTS depin_proofs (hash TEXT PRIMARY KEY, nonce INTEGER, difficulty INTEGER, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)")
             cur.execute("INSERT OR IGNORE INTO accounts VALUES ('genesis_faucet', 'FOX', 100000.0)")
             cur.execute("INSERT OR IGNORE INTO accounts VALUES ('depin_pool', 'FOX', 0.0)")
+            cur.execute("INSERT OR IGNORE INTO accounts VALUES ('user_wallet_01', 'FOX', 250.0)")
             conn.commit()
 
-    def process_batched_micro_payment(self, sender, recipient, amount):
+    def get_balance(self, address):
+        with self.get_conn() as conn:
+            cur = conn.cursor()
+            cur.execute("SELECT balance FROM accounts WHERE address = ?", (address,))
+            row = cur.fetchone()
+            return row[0] if row else 0.0
+
+    def process_wallet_transfer(self, sender, recipient, amount):
+        # Enforce non-negative check & execute transfer
+        faucet_bal = self.get_balance(sender)
+        if faucet_bal < amount:
+            return {"status": "error", "detail": "Insufficient balance for transfer."}
+        
         flushed_batch = self.batcher.add_transaction(sender, recipient, amount)
         if flushed_batch:
             with self.get_conn() as conn:
@@ -99,6 +110,6 @@ class SovereignNode:
             conn = sqlite3.connect(self.db_path)
             conn.execute("PRAGMA integrity_check;")
             conn.close()
-            return {"status": "OPTIMAL", "detail": "Config & SQLite WAL Integrity Verified"}
+            return {"status": "OPTIMAL", "detail": "Wallet Ledger & WAL Integrity Verified"}
         except Exception as e:
             return {"status": "DEGRADED", "detail": str(e)}
