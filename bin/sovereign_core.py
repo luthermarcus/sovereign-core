@@ -11,7 +11,7 @@ def load_manifest():
 class SovereignNode:
     def __init__(self):
         self.config = load_manifest()
-        self.db_path = os.path.expanduser(self.config.get("db_path", "~/node-stack/sovereign_os_v297.db"))
+        self.db_path = os.path.expanduser(self.config.get("db_path", "~/node-stack/sovereign_os_v299.db"))
         self.backup_dir = os.path.expanduser("~/sovereign-ecosystem/backups")
         self.media_dir = os.path.expanduser("~/sovereign-ecosystem/media_cache")
         self.mail_dir = os.path.expanduser("~/sovereign-ecosystem/mail")
@@ -19,7 +19,7 @@ class SovereignNode:
         self.vault_path = os.path.expanduser("~/sovereign-ecosystem/vault/master.key")
         self.auth_cookie_path = os.path.expanduser("~/sovereign-ecosystem/vault/rpc_auth.cookie")
         self.bound_rest_port = None
-        self.current_version = "v2.9.7-beta"
+        self.current_version = "v2.9.9-beta"
 
         self._init_security_vaults()
         self.run_adaptive_diagnostics_and_pruning()
@@ -52,6 +52,7 @@ class SovereignNode:
         os.makedirs(self.modules_dir, exist_ok=True)
         
         channel = self.config.get("release_channel", "BETA")
+        ff = self.config.get("feature_flags", {})
         
         with self.get_conn() as conn:
             conn.execute("CREATE TABLE IF NOT EXISTS accounts (address TEXT PRIMARY KEY, cipher_payload TEXT, balance REAL CHECK(balance >= 0))")
@@ -70,12 +71,16 @@ class SovereignNode:
 
             if channel in ["BETA", "SIMULATION", "DEV"]:
                 conn.execute("CREATE TABLE IF NOT EXISTS beta_telemetry_feedback (feedback_id TEXT PRIMARY KEY, subsystem TEXT, comments TEXT, status TEXT, timestamp REAL)")
-                conn.execute("INSERT OR IGNORE INTO beta_telemetry_feedback VALUES ('fb_init', '[Knowledge Crawler]', 'Standalone crawler module active in v2.9.7.', 'OPEN', ?)", (time.time(),))
+                if ff.get("sandbox_bypass_override"):
+                    conn.execute("INSERT OR REPLACE INTO system_flags VALUES ('SANDBOX_BYPASS', 'WARN', 'ACTIVE', 'Encrypted Sandbox Override Engaged', ?)", (time.time(),))
+                else:
+                    conn.execute("DELETE FROM system_flags WHERE flag_key='SANDBOX_BYPASS'")
             else:
                 conn.execute("DROP TABLE IF EXISTS beta_telemetry_feedback;")
                 conn.execute("DROP TABLE IF EXISTS connection_firewall_log;")
                 conn.execute("DROP TABLE IF EXISTS network_stress_alerts;")
                 conn.execute("DROP TABLE IF EXISTS network_knowledge_base;")
+                conn.execute("DELETE FROM system_flags WHERE flag_key='SANDBOX_BYPASS'")
 
             # Seed default data
             conn.execute("INSERT OR IGNORE INTO accounts VALUES ('user_wallet_01', ?, 250.0)", (base64.b64encode(b"user").decode(),))
@@ -86,10 +91,23 @@ class SovereignNode:
             conn.execute("INSERT OR IGNORE INTO developer_plugins VALUES ('plugin_sandbox_01', 'Core Debugger', 'debug.py', 'ACTIVE')")
             
             now = time.time()
-            conn.execute("INSERT OR IGNORE INTO network_peers VALUES ('peer_node_alpha', '10.0.0.1', 'v2.9.7-beta', 'ACTIVE', 12.5, 0, ?)", (now,))
+            conn.execute("INSERT OR IGNORE INTO network_peers VALUES ('peer_node_alpha', '10.0.0.1', 'v2.9.9-beta', 'ACTIVE', 12.5, 0, ?)", (now,))
             conn.execute("INSERT OR IGNORE INTO connection_firewall_log VALUES ('fw_sample_01', '198.51.100.42:9050', 'BLOCKED', 'Untrusted external scraper IP blocked by Sovereign Firewall.', ?)", (now - 300,))
-            conn.execute("INSERT OR IGNORE INTO network_knowledge_base VALUES ('ecosystem_alpha_hub', '10.0.0.15:8080', 'v2.9.7-beta', 98.5, ?)", (now,))
+            conn.execute("INSERT OR IGNORE INTO network_knowledge_base VALUES ('ecosystem_alpha_hub', '10.0.0.15:8080', 'v2.9.9-beta', 98.5, ?)", (now,))
             conn.commit()
+
+    def broadcast_stress_signal_to_peers(self):
+        now = time.time()
+        with self.get_conn() as conn:
+            peers = conn.execute("SELECT peer_id FROM network_peers WHERE status='ACTIVE'").fetchall()
+            count = 0
+            for p in peers:
+                peer_id = p[0]
+                alert_id = f"alert_{int(now)}_{os.urandom(2).hex()}"
+                conn.execute("INSERT OR REPLACE INTO network_stress_alerts VALUES (?, ?, 'STRESS_TEST_SIGNAL', 'BROADCASTED', ?)", (alert_id, peer_id, now))
+                count += 1
+            conn.commit()
+        return {"status": "SUCCESS", "notified_peers": count, "message": f"Broadcasted stress test notification to {count} active peers."}
 
     def get_knowledge_base_entries(self):
         with self.get_conn() as conn:
@@ -136,6 +154,14 @@ class SovereignNode:
                 flags[flag_key] = not flags[flag_key]
                 manifest["feature_flags"] = flags
                 with open(path, 'w') as f: json.dump(manifest, f, indent=2)
+                
+                with self.get_conn() as conn:
+                    if flag_key == "sandbox_bypass_override":
+                        if flags[flag_key]:
+                            conn.execute("INSERT OR REPLACE INTO system_flags VALUES ('SANDBOX_BYPASS', 'WARN', 'ACTIVE', 'Encrypted Sandbox Override Engaged', ?)", (time.time(),))
+                        else:
+                            conn.execute("DELETE FROM system_flags WHERE flag_key='SANDBOX_BYPASS'")
+                        conn.commit()
                 return {"status": "SUCCESS", "flag": flag_key, "new_state": flags[flag_key]}
         except Exception as e:
             return {"status": "ERROR", "message": str(e)}
@@ -253,9 +279,11 @@ class SovereignNode:
 
             knowledge_count = 0
             blocked_conn = 0
+            notified_stress = 0
             try:
                 knowledge_count = conn.execute("SELECT COUNT(*) FROM network_knowledge_base").fetchone()[0]
                 blocked_conn = conn.execute("SELECT COUNT(*) FROM connection_firewall_log WHERE action='BLOCKED'").fetchone()[0]
+                notified_stress = conn.execute("SELECT COUNT(*) FROM network_stress_alerts").fetchone()[0]
             except: pass
 
             storage_usage = self.get_local_storage_usage()
@@ -272,6 +300,7 @@ class SovereignNode:
                 "outdated_peers": outdated_peers,
                 "indexed_ecosystems": knowledge_count,
                 "blocked_connections": blocked_conn,
+                "stress_notified_peers": notified_stress,
                 "storage": {"used_mb": storage_usage, "cap_mb": storage_cap},
                 "flags": self.query_system_flags()
             }

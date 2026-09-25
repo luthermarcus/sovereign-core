@@ -37,8 +37,10 @@ def display_main_header():
             tbl.add_row(f"FLAG: {f['key'][:12]}", f"[{col}]{f['message'][:22]}[/{col}]")
 
     st = state["storage"]
-    tbl.add_row("--- [bold magenta]🔍 Standalone Knowledge Base & Crawler[/bold magenta] ---", "---")
+    ff = state.get("feature_flags", {})
+    tbl.add_row("--- [bold magenta]🔍 Unified Knowledge Base & Crawler[/bold magenta] ---", "---")
     tbl.add_row("Indexed Ecosystems", f"[cyan]{state['indexed_ecosystems']} External Networks Mapped[/cyan]")
+    tbl.add_row("Sandbox Bypass Override", f"[yellow]{'ENGAGED (WARNING)' if ff.get('sandbox_bypass_override') else 'DISABLED (SECURE)'}[/yellow]")
     tbl.add_row("Blocked Connection Alerts", f"[red]{state['blocked_connections']} Endpoints Blocked[/red]")
     tbl.add_row("Local Storage Allocation", f"{st['used_mb']:.1f} MB / {st['cap_mb']} MB (Cap Guard)")
     tbl.add_row("--- [bold green]₿ AMM DEX & Balances[/bold green] ---", "---")
@@ -59,8 +61,8 @@ if __name__ == "__main__":
                 rprint(f"\n[bold cyan]Bare-Metal Operations Menu [Page 1/3] ({ch}):[/bold cyan]")
                 rprint("  [1] 📥 Receive Funds (View Address & QR Data)")
                 rprint("  [2] 💸 Send Transaction (Custom Fee Selection & Poison Guard)")
-                rprint("  [3] 🔍 Run Standalone Knowledge Crawler & View Mapped Networks")
-                rprint("  [4] ⚙️ Open Beta Options Manual (Toggle Flags)")
+                rprint("  [3] 🔍 Run Knowledge Crawler & View Mapped Ecosystems")
+                rprint("  [4] ⚙️ Open Beta Options Manual (Toggle Sandbox Override & Flags)")
                 rprint("  [5] ➡️  Go to Menu Page 2 (Dev Tools & Simulation)")
                 rprint("  [6] 🚪 Exit System")
                 choice = input("\nSelect [1-6]: ").strip()
@@ -92,12 +94,12 @@ if __name__ == "__main__":
                 elif choice == "4":
                     console.clear()
                     ff = state.get("feature_flags", {})
-                    rprint(Panel(f"[bold yellow]Beta Options Manual[/bold yellow]\nConfigure experimental features.", title="[Options Manual]", border_style="yellow"))
+                    rprint(Panel(f"[bold yellow]Beta Options Manual[/bold yellow]\nConfigure experimental features and security overrides.", title="[Options Manual]", border_style="yellow"))
                     rprint(f"  [1] Toggle Beta Telemetry ({ff.get('beta_telemetry_enabled')})")
                     rprint(f"  [2] Toggle P2P Auto-Update ({ff.get('p2p_auto_update_signaling')})")
-                    rprint(f"  [3] Toggle Standalone Crawler ({ff.get('standalone_knowledge_crawler')})")
+                    rprint(f"  [3] Toggle Sandbox Bypass Override ({ff.get('sandbox_bypass_override')}) [WARNING]")
                     opt = input("\nSelect flag to toggle [1-3] or press Enter: ").strip()
-                    flag_map = {"1": "beta_telemetry_enabled", "2": "p2p_auto_update_signaling", "3": "standalone_knowledge_crawler"}
+                    flag_map = {"1": "beta_telemetry_enabled", "2": "p2p_auto_update_signaling", "3": "sandbox_bypass_override"}
                     if opt in flag_map:
                         res = node.toggle_feature_flag(flag_map[opt])
                         rprint(f"\n[green]Flag updated: {res}[/green]")
@@ -152,7 +154,7 @@ if __name__ == "__main__":
             elif page == 3:
                 rprint(f"\n[bold cyan]Bare-Metal Operations Menu [Page 3/3] ({ch}):[/bold cyan]")
                 rprint("  [1] 🗺️ View Project Roadmap & Listing Milestones")
-                rprint("  [2] 🔄 Toggle Release Channel (BETA ⇄ LIVE)")
+                rprint("  [2] 🔄 Toggle Release Channel (BETA ⇄ LIVE [Prunes Override])")
                 rprint("  [3] 💾 Backup Database (VACUUM INTO Snapshot)")
                 rprint("  [4] ⬅️  Return to Menu Page 2")
                 rprint("  [5] 🚪 Exit System")
@@ -167,7 +169,7 @@ if __name__ == "__main__":
                     toggle_release_channel()
                     manifest = load_manifest()
                     node.config = manifest
-                    rprint(f"\n[green]Channel switched to: {manifest.get('release_channel')}[/green]")
+                    rprint(f"\n[green]Channel switched to: {manifest.get('release_channel')}. Sandbox overrides automatically pruned if LIVE![/green]")
                     time.sleep(1.5)
                 elif choice == "3":
                     console.clear()
