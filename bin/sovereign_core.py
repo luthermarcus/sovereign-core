@@ -11,7 +11,7 @@ def load_manifest():
 class SovereignNode:
     def __init__(self):
         self.config = load_manifest()
-        self.db_path = os.path.expanduser(self.config.get("db_path", "~/node-stack/sovereign_os_v299.db"))
+        self.db_path = os.path.expanduser(self.config.get("db_path", "~/node-stack/sovereign_os_v2910.db"))
         self.backup_dir = os.path.expanduser("~/sovereign-ecosystem/backups")
         self.media_dir = os.path.expanduser("~/sovereign-ecosystem/media_cache")
         self.mail_dir = os.path.expanduser("~/sovereign-ecosystem/mail")
@@ -19,7 +19,7 @@ class SovereignNode:
         self.vault_path = os.path.expanduser("~/sovereign-ecosystem/vault/master.key")
         self.auth_cookie_path = os.path.expanduser("~/sovereign-ecosystem/vault/rpc_auth.cookie")
         self.bound_rest_port = None
-        self.current_version = "v2.9.9-beta"
+        self.current_version = "v2.9.10-beta"
 
         self._init_security_vaults()
         self.run_adaptive_diagnostics_and_pruning()
@@ -68,6 +68,7 @@ class SovereignNode:
             conn.execute("CREATE TABLE IF NOT EXISTS connection_firewall_log (firewall_id TEXT PRIMARY KEY, endpoint TEXT, action TEXT, reason TEXT, timestamp REAL)")
             conn.execute("CREATE TABLE IF NOT EXISTS network_stress_alerts (alert_id TEXT PRIMARY KEY, peer_id TEXT, signal_type TEXT, status TEXT, timestamp REAL)")
             conn.execute("CREATE TABLE IF NOT EXISTS network_knowledge_base (ecosystem_id TEXT PRIMARY KEY, endpoint TEXT, protocol_version TEXT, health_score REAL, indexed_at REAL)")
+            conn.execute("CREATE TABLE IF NOT EXISTS connection_audit_status (ecosystem_id TEXT PRIMARY KEY, endpoint TEXT, connection_status TEXT, last_checked REAL)")
 
             if channel in ["BETA", "SIMULATION", "DEV"]:
                 conn.execute("CREATE TABLE IF NOT EXISTS beta_telemetry_feedback (feedback_id TEXT PRIMARY KEY, subsystem TEXT, comments TEXT, status TEXT, timestamp REAL)")
@@ -80,6 +81,7 @@ class SovereignNode:
                 conn.execute("DROP TABLE IF EXISTS connection_firewall_log;")
                 conn.execute("DROP TABLE IF EXISTS network_stress_alerts;")
                 conn.execute("DROP TABLE IF EXISTS network_knowledge_base;")
+                conn.execute("DROP TABLE IF EXISTS connection_audit_status;")
                 conn.execute("DELETE FROM system_flags WHERE flag_key='SANDBOX_BYPASS'")
 
             # Seed default data
@@ -91,35 +93,25 @@ class SovereignNode:
             conn.execute("INSERT OR IGNORE INTO developer_plugins VALUES ('plugin_sandbox_01', 'Core Debugger', 'debug.py', 'ACTIVE')")
             
             now = time.time()
-            conn.execute("INSERT OR IGNORE INTO network_peers VALUES ('peer_node_alpha', '10.0.0.1', 'v2.9.9-beta', 'ACTIVE', 12.5, 0, ?)", (now,))
+            conn.execute("INSERT OR IGNORE INTO network_peers VALUES ('peer_node_alpha', '10.0.0.1', 'v2.9.10-beta', 'ACTIVE', 12.5, 0, ?)", (now,))
             conn.execute("INSERT OR IGNORE INTO connection_firewall_log VALUES ('fw_sample_01', '198.51.100.42:9050', 'BLOCKED', 'Untrusted external scraper IP blocked by Sovereign Firewall.', ?)", (now - 300,))
-            conn.execute("INSERT OR IGNORE INTO network_knowledge_base VALUES ('ecosystem_alpha_hub', '10.0.0.15:8080', 'v2.9.9-beta', 98.5, ?)", (now,))
+            conn.execute("INSERT OR IGNORE INTO network_knowledge_base VALUES ('ecosystem_alpha_hub', '10.0.0.15:8080', 'v2.9.10-beta', 98.5, ?)", (now,))
+            conn.execute("INSERT OR IGNORE INTO network_knowledge_base VALUES ('ecosystem_beta_mesh', '192.168.1.50:9000', 'v2.9.9-beta', 91.0, ?)", (now,))
+            conn.execute("INSERT OR IGNORE INTO connection_audit_status VALUES ('ecosystem_alpha_hub', '10.0.0.15:8080', 'AVAILABLE_UNCONNECTED', ?)", (now,))
+            conn.execute("INSERT OR IGNORE INTO connection_audit_status VALUES ('ecosystem_beta_mesh', '192.168.1.50:9000', 'AVAILABLE_UNCONNECTED', ?)", (now,))
             conn.commit()
 
-    def broadcast_stress_signal_to_peers(self):
-        now = time.time()
-        with self.get_conn() as conn:
-            peers = conn.execute("SELECT peer_id FROM network_peers WHERE status='ACTIVE'").fetchall()
-            count = 0
-            for p in peers:
-                peer_id = p[0]
-                alert_id = f"alert_{int(now)}_{os.urandom(2).hex()}"
-                conn.execute("INSERT OR REPLACE INTO network_stress_alerts VALUES (?, ?, 'STRESS_TEST_SIGNAL', 'BROADCASTED', ?)", (alert_id, peer_id, now))
-                count += 1
-            conn.commit()
-        return {"status": "SUCCESS", "notified_peers": count, "message": f"Broadcasted stress test notification to {count} active peers."}
-
-    def get_knowledge_base_entries(self):
-        with self.get_conn() as conn:
-            return conn.execute("SELECT ecosystem_id, endpoint, protocol_version, health_score FROM network_knowledge_base").fetchall()
-
-    def run_crawler_subprocess(self):
-        crawler_path = os.path.expanduser("~/sovereign-ecosystem/bin/sovereign_crawler.py")
+    def run_auditor_subprocess(self):
+        auditor_path = os.path.expanduser("~/sovereign-ecosystem/bin/sovereign_crawler.py")
         try:
-            res = subprocess.run(["python3", crawler_path], capture_output=True, text=True, timeout=10)
+            res = subprocess.run(["python3", auditor_path], capture_output=True, text=True, timeout=10)
             return {"status": "SUCCESS", "output": res.stdout.strip()}
         except Exception as e:
             return {"status": "ERROR", "message": str(e)}
+
+    def get_audit_status_entries(self):
+        with self.get_conn() as conn:
+            return conn.execute("SELECT ecosystem_id, endpoint, connection_status FROM connection_audit_status").fetchall()
 
     def get_local_storage_usage(self):
         total_bytes = 0
@@ -277,13 +269,11 @@ class SovereignNode:
             total_peers = len(peer_rows)
             outdated_peers = sum(1 for p in peer_rows if p[0] != self.current_version)
 
-            knowledge_count = 0
+            unconnected_count = 0
             blocked_conn = 0
-            notified_stress = 0
             try:
-                knowledge_count = conn.execute("SELECT COUNT(*) FROM network_knowledge_base").fetchone()[0]
+                unconnected_count = conn.execute("SELECT COUNT(*) FROM connection_audit_status WHERE connection_status='AVAILABLE_UNCONNECTED'").fetchone()[0]
                 blocked_conn = conn.execute("SELECT COUNT(*) FROM connection_firewall_log WHERE action='BLOCKED'").fetchone()[0]
-                notified_stress = conn.execute("SELECT COUNT(*) FROM network_stress_alerts").fetchone()[0]
             except: pass
 
             storage_usage = self.get_local_storage_usage()
@@ -298,9 +288,8 @@ class SovereignNode:
                 "bridge_locked": bridges,
                 "total_peers": total_peers,
                 "outdated_peers": outdated_peers,
-                "indexed_ecosystems": knowledge_count,
+                "unconnected_available": unconnected_count,
                 "blocked_connections": blocked_conn,
-                "stress_notified_peers": notified_stress,
                 "storage": {"used_mb": storage_usage, "cap_mb": storage_cap},
                 "flags": self.query_system_flags()
             }

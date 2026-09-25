@@ -29,7 +29,7 @@ def display_main_header():
 
     active_flags = [f for f in flags if f["status"] == "ACTIVE"]
     if not active_flags:
-        tbl.add_row("--- [bold yellow]📡 Security & Knowledge Gateway[/bold yellow] ---", "---")
+        tbl.add_row("--- [bold yellow]📡 Security & Connection Health Gateway[/bold yellow] ---", "---")
         tbl.add_row("System Integrity", "[bold green]● ALL WAL TABLES SECURE[/bold green]")
     else:
         for f in active_flags:
@@ -38,8 +38,8 @@ def display_main_header():
 
     st = state["storage"]
     ff = state.get("feature_flags", {})
-    tbl.add_row("--- [bold magenta]🔍 Unified Knowledge Base & Crawler[/bold magenta] ---", "---")
-    tbl.add_row("Indexed Ecosystems", f"[cyan]{state['indexed_ecosystems']} External Networks Mapped[/cyan]")
+    tbl.add_row("--- [bold magenta]🌐 Connection Auditor & Available Routes[/bold magenta] ---", "---")
+    tbl.add_row("Available Unconnected Routes", f"[yellow]{state['unconnected_available']} Backends Available (Unlinked)[/yellow]")
     tbl.add_row("Sandbox Bypass Override", f"[yellow]{'ENGAGED (WARNING)' if ff.get('sandbox_bypass_override') else 'DISABLED (SECURE)'}[/yellow]")
     tbl.add_row("Blocked Connection Alerts", f"[red]{state['blocked_connections']} Endpoints Blocked[/red]")
     tbl.add_row("Local Storage Allocation", f"{st['used_mb']:.1f} MB / {st['cap_mb']} MB (Cap Guard)")
@@ -61,7 +61,7 @@ if __name__ == "__main__":
                 rprint(f"\n[bold cyan]Bare-Metal Operations Menu [Page 1/3] ({ch}):[/bold cyan]")
                 rprint("  [1] 📥 Receive Funds (View Address & QR Data)")
                 rprint("  [2] 💸 Send Transaction (Custom Fee Selection & Poison Guard)")
-                rprint("  [3] 🔍 Run Knowledge Crawler & View Mapped Ecosystems")
+                rprint("  [3] 🌐 Run Connection Auditor & View Available Routes")
                 rprint("  [4] ⚙️ Open Beta Options Manual (Toggle Sandbox Override & Flags)")
                 rprint("  [5] ➡️  Go to Menu Page 2 (Dev Tools & Simulation)")
                 rprint("  [6] 🚪 Exit System")
@@ -85,11 +85,11 @@ if __name__ == "__main__":
                     input("\nPress [Enter] to return...")
                 elif choice == "3":
                     console.clear()
-                    rprint(Panel("[bold cyan]Executing Standalone Knowledge Crawler...[/bold cyan]", title="[Crawler]", border_style="cyan"))
-                    crawl_res = node.run_crawler_subprocess()
-                    entries = node.get_knowledge_base_entries()
-                    kb_summary = "\n".join([f"• ID: {e[0]} │ Endpoint: {e[1]} │ Ver: {e[2]} │ Health: {e[3]}%" for e in entries]) or "No networks indexed."
-                    rprint(Panel(f"[bold green]Knowledge Base Mapped Networks:[/bold green]\n\n{kb_summary}", title="[Knowledge Base]", border_style="green"))
+                    rprint(Panel("[bold cyan]Running Connection Health Auditor...[/bold cyan]", title="[Auditor]", border_style="cyan"))
+                    audit_res = node.run_auditor_subprocess()
+                    entries = node.get_audit_status_entries()
+                    audit_summary = "\n".join([f"• Eco: {e[0]} │ Endpoint: {e[1]} │ Status: [yellow]{e[2]}[/yellow]" for e in entries]) or "No routes audited."
+                    rprint(Panel(f"[bold green]Backend Connection Audit Status:[/bold green]\n\n{audit_summary}", title="[Connection Auditor]", border_style="green"))
                     input("\nPress [Enter] to return...")
                 elif choice == "4":
                     console.clear()
