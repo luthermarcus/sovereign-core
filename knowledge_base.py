@@ -6,18 +6,15 @@ import time
 import os
 
 class ProtocolKnowledgeBase:
-    """
-    Automated Reconnaissance Engine:
-    Tracks upstream ERC-4337 Account Abstraction and network dependencies.
-    """
     def __init__(self, db_path="/home/luther/node-stack/ecosystem_metrics.db"):
         self.db_path = db_path
         self._init_db()
+        # Swapped AppArmor for the ERC-4337 Bundler node tracker
         self.TARGET_REPOS = [
             "eth-infinitism/account-abstraction", 
+            "eth-infinitism/bundler",               
             "ethereum/go-ethereum",               
-            "mysteriumnetwork/node",
-            "AppArmor/apparmor"
+            "mysteriumnetwork/node"
         ]
 
     def _init_db(self):
@@ -61,6 +58,12 @@ class ProtocolKnowledgeBase:
                             stable_date = release.get('published_at', 'N/A')[:10]
                         if stable_tag != "None" and pre_tag != "None":
                             break
+
+                    # FIX: Prevent flagging old betas if the stable version is newer
+                    if pre_date != "N/A" and stable_date != "N/A":
+                        if pre_date <= stable_date:
+                            pre_tag = "None"
+                            pre_date = "N/A"
 
                     cursor.execute('''
                         INSERT OR REPLACE INTO protocol_knowledge_base 
