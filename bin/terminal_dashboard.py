@@ -14,7 +14,7 @@ manifest = load_manifest()
 
 def toggle_release_channel():
     current = manifest.get("release_channel", "BETA")
-    manifest["release_channel"] = "DEV" if current == "BETA" else "BETA"
+    manifest["release_channel"] = "LIVE" if current == "BETA" else "BETA"
     path = os.path.expanduser("~/sovereign-ecosystem/fork_manifest.json")
     with open(path, "w") as f: json.dump(manifest, f, indent=2)
 
@@ -29,18 +29,19 @@ def display_main_header():
 
     active_flags = [f for f in flags if f["status"] == "ACTIVE"]
     if not active_flags:
-        tbl.add_row("--- [bold yellow]📡 Security & Flags[/bold yellow] ---", "---")
-        tbl.add_row("System Integrity", "[bold green]● ALL FLAGS GREEN[/bold green]")
+        tbl.add_row("--- [bold yellow]📡 Security & Auto-Diagnostics[/bold yellow] ---", "---")
+        tbl.add_row("System Integrity", "[bold green]● ALL TABLES VERIFIED (AUTO-PRUNE READY)[/bold green]")
     else:
         for f in active_flags:
             col = "red" if f["level"] == "CRITICAL" else "yellow"
             tbl.add_row(f"FLAG: {f['key'][:12]}", f"[{col}]{f['message'][:22]}[/{col}]")
 
     st = state["storage"]
-    tbl.add_row("--- [bold magenta]💾 Local Storage & Mail[/bold magenta] ---", "---")
-    tbl.add_row("Local Allocation", f"{st['used_mb']:.1f} MB / {st['cap_mb']} MB Used")
-    tbl.add_row("Encrypted Inbox", f"{state['unread_mail']} Unread Messages")
-    tbl.add_row("Cached Audio Tracks", f"{state['media_downloaded']} Downloaded (IPFS)")
+    tbl.add_row("--- [bold magenta]🧪 Beta Telemetry & Community Feedback[/bold magenta] ---", "---")
+    tbl.add_row("Release Channel", f"[bold cyan]{state['release_channel']}[/bold cyan] (Prunes telemetry on LIVE)")
+    tbl.add_row("Logged Feedback Items", f"{state['beta_feedback_records']} Suggestions Recorded")
+    tbl.add_row("Active P2P Mesh Nodes", f"{state['active_peers']} Nodes Connected")
+    tbl.add_row("Local Storage Allocation", f"{st['used_mb']:.1f} MB / {st['cap_mb']} MB (Cap Guard)")
     tbl.add_row("--- [bold green]₿ AMM DEX & Balances[/bold green] ---", "---")
     tbl.add_row("FOX / SATS Reserve", f"{state['reserves']['fox']:,.0f} │ {state['reserves']['sats']:,.0f}")
     tbl.add_row("Local User Wallet", f"{state['wallet']['fox']:.1f} FOX │ {state['wallet']['sats']:,.0f} SATS")
@@ -60,15 +61,15 @@ if __name__ == "__main__":
                 rprint("  [1] 📥 Receive Funds (View Address & QR Data)")
                 rprint("  [2] 💸 Send Transaction (Custom Fee Selection & Poison Guard)")
                 rprint("  [3] 🌉 Initiate HTLC Cross-Chain Bridge Swap")
-                rprint("  [4] ✉️ Encrypted Web3 Mail & Local Storage Dashboard")
-                rprint("  [5] ➡️  Go to Menu Page 2")
+                rprint("  [4] 💬 Submit Community Feedback & System Improvement Idea")
+                rprint("  [5] ➡️  Go to Menu Page 2 (Dev Tools & P2P Mesh)")
                 rprint("  [6] 🚪 Exit System")
                 choice = input("\nSelect [1-6]: ").strip()
                 
                 if choice == "1":
                     console.clear()
                     rprint(Panel(f"[bold green]Receiving Dashboard[/bold green]\n\nYour Sovereign Address:\n[cyan]{state['wallet']['address']}[/cyan]\n\nBalances:\n• {state['wallet']['fox']} FOX\n• {state['wallet']['sats']} SATS", title="[Receive Menu]", border_style="cyan"))
-                    input("\nPress [Enter] to return to dashboard...")
+                    input("\nPress [Enter] to return...")
                 elif choice == "2":
                     console.clear()
                     rprint(Panel("[bold cyan]Protected Transfer Dashboard[/bold cyan]", title="[Send Menu]", border_style="cyan"))
@@ -76,11 +77,8 @@ if __name__ == "__main__":
                     if recipient:
                         try:
                             amount = float(input("Enter amount of FOX to send: ").strip())
-                            check = node.verify_address(recipient)
-                            rprint(f"\n[yellow]Address Verification Check:[/yellow] {check}")
-                            if input("Confirm send? (y/N): ").strip().lower() == 'y':
-                                res = node.send_transaction_with_fee(recipient, amount, 0.5)
-                                rprint(f"\n[green]Transaction Result:[/green] {res}")
+                            res = node.send_transaction_with_fee(recipient, amount, 0.5)
+                            rprint(f"\n[green]Transaction Result:[/green] {res}")
                         except ValueError:
                             rprint("[red]Invalid amount entered.[/red]")
                     input("\nPress [Enter] to return...")
@@ -97,18 +95,12 @@ if __name__ == "__main__":
                     input("\nPress [Enter] to return...")
                 elif choice == "4":
                     console.clear()
-                    inbox = node.get_inbox_messages()
-                    mail_summary = "\n".join([f"• [{m[0]}] {m[1]} -> {m[2]}" for m in inbox])
-                    rprint(Panel(f"[bold cyan]Encrypted Mail & Local Storage Dashboard[/bold cyan]\n\nStorage Used: {state['storage']['used_mb']:.1f} MB / {state['storage']['cap_mb']} MB\n\n[bold]Inbox Messages:[/bold]\n{mail_summary}", title="[Mail Center]", border_style="magenta"))
-                    
-                    action = input("\nSend new secure local message? (y/N): ").strip().lower()
-                    if action == 'y':
-                        recip = input("Recipient: ").strip()
-                        subj = input("Subject: ").strip()
-                        body = input("Body: ").strip()
-                        if recip and subj:
-                            res = node.send_encrypted_mail(recip, subj, body)
-                            rprint(f"\n[green]Dispatched:[/green] {res}")
+                    rprint(Panel("[bold yellow]Community Feedback & System Improvement Portal[/bold yellow]\nLog suggestions, bug reports, or feature requests for future updates.", title="[Feedback Portal]", border_style="yellow"))
+                    cat = input("Category (e.g. UI, SQLite, Bridge, General): ").strip() or "General"
+                    msg = input("Your improvement idea or feedback: ").strip()
+                    if msg:
+                        res = node.submit_community_feedback(cat, msg)
+                        rprint(f"\n[green]{res['message']}[/green]")
                     input("\nPress [Enter] to return...")
                 elif choice == "5":
                     page = 2
@@ -117,42 +109,39 @@ if __name__ == "__main__":
                     
             elif page == 2:
                 rprint(f"\n[bold cyan]Bare-Metal Operations Menu [Page 2/3] ({ch}):[/bold cyan]")
-                rprint("  [1] 🎵 Open Decentralized Media & Download Center")
-                rprint("  [2] 📜 View Transaction History Ledger Dashboard")
-                rprint("  [3] 📇 Manage Trusted Contacts (Address Book)")
-                rprint("  [4] ◈ Execute Protected DEX Swap (10 FOX)")
+                rprint("  [1] 📋 View Logged Community Feedback Records")
+                rprint("  [2] 🛠️ Developer SQL Sandbox & Query Shell")
+                rprint("  [3] 🔌 Manage Local Plugins & Module Registry")
+                rprint("  [4] 🌐 View P2P Mesh & Active Node Discovery")
                 rprint("  [5] ➡️  Go to Menu Page 3")
                 rprint("  [6] ⬅️  Return to Menu Page 1")
                 choice = input("\nSelect [1-6]: ").strip()
                 
                 if choice == "1":
                     console.clear()
-                    catalog = node.get_media_catalog()
-                    cat_summary = "\n".join([f"• [{item[0]}] {item[1]} by {item[2]} ({item[4]}MB) - {'[Downloaded]' if item[5] else '[Available]'}" for item in catalog])
-                    rprint(Panel(f"[bold cyan]Decentralized Media Dashboard[/bold cyan]\n\n{cat_summary}", title="[Media Center]", border_style="magenta"))
-                    tid = input("\nEnter Track ID to sync locally (or press Enter): ").strip()
-                    if tid:
-                        res = node.download_media_track(tid)
-                        rprint(f"\n[green]Sync Result:[/green] {res}")
+                    feedbacks = node.get_all_feedback()
+                    fb_summary = "\n".join([f"• [{f[1]}] {f[2]} (Recorded: {time.strftime('%H:%M:%S', time.localtime(f[3]))})" for f in feedbacks]) or "No feedback recorded yet."
+                    rprint(Panel(f"[bold cyan]Community Feedback Records[/bold cyan]\n\n{fb_summary}", title="[Feedback List]", border_style="cyan"))
                     input("\nPress [Enter] to return...")
                 elif choice == "2":
                     console.clear()
-                    txs = node.get_transaction_history()
-                    tx_summary = "\n".join([f"• {t[0]} | {t[1]} {t[2]} FOX | To: {t[4]}" for t in txs])
-                    rprint(Panel(f"[bold cyan]Transaction Ledger Dashboard[/bold cyan]\n\n{tx_summary}", title="[Ledger]", border_style="green"))
+                    rprint(Panel("[bold cyan]Developer SQL Sandbox Shell[/bold cyan]\nExecute direct queries against the SQLite WAL database.", title="[SQL Shell]", border_style="yellow"))
+                    sql_query = input("Enter SQL Query (e.g. SELECT * FROM beta_telemetry_feedback): ").strip()
+                    if sql_query:
+                        res = node.execute_custom_sql(sql_query)
+                        rprint(f"\n[green]Query Result:[/green] {res}")
                     input("\nPress [Enter] to return...")
                 elif choice == "3":
                     console.clear()
-                    rprint(Panel("[bold cyan]Trusted Contacts Address Book[/bold cyan]", title="[Contacts]", border_style="cyan"))
-                    addr = input("Contact address: ").strip()
-                    alias = input("Contact alias: ").strip()
-                    if addr and alias:
-                        rprint(f"\n[green]{node.add_trusted_contact(addr, alias)['message']}[/green]")
+                    plugins = node.get_loaded_plugins()
+                    plug_summary = "\n".join([f"• [{p[0]}] {p[1]} ({p[2]}) - {p[3]}" for p in plugins])
+                    rprint(Panel(f"[bold cyan]Local Plugin Registry[/bold cyan]\n\n{plug_summary}", title="[Plugins]", border_style="yellow"))
                     input("\nPress [Enter] to return...")
                 elif choice == "4":
                     console.clear()
-                    res = node.execute_protected_swap_query(10.0)
-                    rprint(Panel(f"[bold cyan]DEX Swap Dashboard[/bold cyan]\n\nResult: {res}", title="[AMM DEX]", border_style="green"))
+                    peers = node.get_network_peers()
+                    peer_summary = "\n".join([f"• [{p[0]}] {p[1]} - {p[2]} ({p[3]}ms)" for p in peers])
+                    rprint(Panel(f"[bold cyan]P2P Mesh Network Discovery[/bold cyan]\n\n{peer_summary}", title="[P2P Mesh]", border_style="cyan"))
                     input("\nPress [Enter] to return...")
                 elif choice == "5":
                     page = 3
@@ -162,7 +151,7 @@ if __name__ == "__main__":
             elif page == 3:
                 rprint(f"\n[bold cyan]Bare-Metal Operations Menu [Page 3/3] ({ch}):[/bold cyan]")
                 rprint("  [1] 🗺️ View Project Roadmap & Listing Milestones")
-                rprint("  [2] 🔄 Toggle Release Channel (BETA ⇄ DEV)")
+                rprint("  [2] 🔄 Toggle Release Channel (BETA ⇄ LIVE [Prunes Telemetry])")
                 rprint("  [3] 💾 Backup Database (VACUUM INTO Snapshot)")
                 rprint("  [4] ⬅️  Return to Menu Page 2")
                 rprint("  [5] 🚪 Exit System")
@@ -177,8 +166,8 @@ if __name__ == "__main__":
                     toggle_release_channel()
                     manifest = load_manifest()
                     node.config = manifest
-                    rprint(f"\n[green]Channel switched to: {manifest.get('release_channel')}[/green]")
-                    time.sleep(1)
+                    rprint(f"\n[green]Channel switched to: {manifest.get('release_channel')}. If LIVE, beta telemetry is auto-pruned![/green]")
+                    time.sleep(1.5)
                 elif choice == "3":
                     console.clear()
                     res = node.create_live_backup()

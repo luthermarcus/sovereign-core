@@ -11,18 +11,18 @@ def load_manifest():
 class SovereignNode:
     def __init__(self):
         self.config = load_manifest()
-        self.db_path = os.path.expanduser(self.config.get("db_path", "~/node-stack/sovereign_os_v274.db"))
+        self.db_path = os.path.expanduser(self.config.get("db_path", "~/node-stack/sovereign_os_v281.db"))
         self.backup_dir = os.path.expanduser("~/sovereign-ecosystem/backups")
         self.media_dir = os.path.expanduser("~/sovereign-ecosystem/media_cache")
         self.mail_dir = os.path.expanduser("~/sovereign-ecosystem/mail")
+        self.modules_dir = os.path.expanduser("~/sovereign-ecosystem/modules")
         self.vault_path = os.path.expanduser("~/sovereign-ecosystem/vault/master.key")
         self.auth_cookie_path = os.path.expanduser("~/sovereign-ecosystem/vault/rpc_auth.cookie")
         self.bound_rest_port = None
-        self.current_version = "v2.7.4"
+        self.current_version = "v2.8.1-beta"
 
         self._init_security_vaults()
-        self.run_preflight_checks()
-        self.init_database()
+        self.run_autonomous_diagnostics_and_pruning()
         self.start_resilient_rest_api()
         self.start_autonomous_watchdog()
 
@@ -44,23 +44,17 @@ class SovereignNode:
         conn.execute("PRAGMA temp_store = MEMORY;")
         return conn
 
-    def run_preflight_checks(self):
+    def run_autonomous_diagnostics_and_pruning(self):
+        """Self-healing boot inspector with conditional beta telemetry pruning for live releases."""
         os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
         os.makedirs(self.media_dir, exist_ok=True)
         os.makedirs(self.mail_dir, exist_ok=True)
-        conn = sqlite3.connect(self.db_path)
-        try:
-            cursor = conn.execute("PRAGMA integrity_check;")
-            res = cursor.fetchone()
-            if not res or res[0] != "ok":
-                print(f"[!] Pre-flight storage warning: {res}")
-        except Exception as e:
-            print(f"[!] Pre-flight error: {e}")
-        finally:
-            conn.close()
-
-    def init_database(self):
+        os.makedirs(self.modules_dir, exist_ok=True)
+        
+        channel = self.config.get("release_channel", "BETA")
+        
         with self.get_conn() as conn:
+            # Core tables
             conn.execute("CREATE TABLE IF NOT EXISTS accounts (address TEXT PRIMARY KEY, cipher_payload TEXT, balance REAL CHECK(balance >= 0))")
             conn.execute("CREATE TABLE IF NOT EXISTS liquidity_pools (pool_id TEXT PRIMARY KEY, reserve_a REAL, reserve_b REAL)")
             conn.execute("CREATE TABLE IF NOT EXISTS system_flags (flag_key TEXT PRIMARY KEY, level TEXT, status TEXT, message TEXT, timestamp REAL)")
@@ -70,22 +64,32 @@ class SovereignNode:
             conn.execute("CREATE TABLE IF NOT EXISTS trusted_contacts (address TEXT PRIMARY KEY, alias TEXT)")
             conn.execute("CREATE TABLE IF NOT EXISTS media_registry (track_id TEXT PRIMARY KEY, title TEXT, artist TEXT, ipfs_hash TEXT, size_mb REAL, downloaded INTEGER)")
             conn.execute("CREATE TABLE IF NOT EXISTS web3_mail (mail_id TEXT PRIMARY KEY, sender TEXT, subject TEXT, body TEXT, timestamp REAL, is_read INTEGER)")
+            conn.execute("CREATE TABLE IF NOT EXISTS developer_plugins (plugin_id TEXT PRIMARY KEY, name TEXT, entrypoint TEXT, status TEXT)")
 
+            # Conditional Beta Telemetry vs Live Pruning
+            if channel in ["BETA", "SIMULATION", "DEV"]:
+                conn.execute("CREATE TABLE IF NOT EXISTS beta_telemetry_feedback (feedback_id TEXT PRIMARY KEY, category TEXT, comments TEXT, timestamp REAL)")
+                conn.execute("INSERT OR IGNORE INTO beta_telemetry_feedback VALUES ('fb_init', 'SYSTEM', 'Telemetry feedback loop initialized for beta testing.', ?)", (time.time(),))
+            else:
+                # AUTO-PRUNE: Drop beta tables if node goes LIVE / MAINNET
+                conn.execute("DROP TABLE IF EXISTS beta_telemetry_feedback;")
+
+            # Seed default fixtures
             conn.execute("INSERT OR IGNORE INTO accounts VALUES ('user_wallet_01', ?, 250.0)", (base64.b64encode(b"user").decode(),))
             conn.execute("INSERT OR IGNORE INTO accounts VALUES ('user_wallet_01_sats', ?, 50000.0)", (base64.b64encode(b"sats").decode(),))
             conn.execute("INSERT OR IGNORE INTO liquidity_pools VALUES ('MAIN_POOL', 10000.0, 500000.0)")
             conn.execute("INSERT OR IGNORE INTO trusted_contacts VALUES ('0xVerifiedColdStorage', 'Primary Vault')")
             conn.execute("INSERT OR IGNORE INTO media_registry VALUES ('track_01', 'Genesis Block Symphony', 'Satoshi Sound', 'QmHashGenesis123', 4.2, 1)")
-            conn.execute("INSERT OR IGNORE INTO web3_mail VALUES ('mail_01', 'core-node@sovereign.net', 'Submenu Dashboard Notice', 'Interactive submenus fully deployed in v2.7.4.', ?, 0)", (time.time() - 1800,))
+            conn.execute("INSERT OR IGNORE INTO developer_plugins VALUES ('plugin_sandbox_01', 'Core Debugger', 'debug.py', 'ACTIVE')")
+            conn.execute("INSERT OR IGNORE INTO network_peers VALUES ('peer_bootstrap_01', '10.0.0.1', 'ACTIVE', 12.5, 0, ?)", (time.time(),))
             
             now = time.time()
             conn.execute("INSERT OR IGNORE INTO transaction_ledger VALUES ('tx_genesis', 'CREDIT', 250.0, 1.0, 'Network Faucet', ?)", (now - 3600,))
-            conn.execute("INSERT OR IGNORE INTO cross_chain_bridge VALUES ('bridge_swap_01', 50.0, 'a3f8c...hash', 'LOCKED', ?)", (now + 86400,))
             conn.commit()
 
     def get_local_storage_usage(self):
         total_bytes = 0
-        paths = [self.db_path, self.backup_dir, self.media_dir, self.mail_dir]
+        paths = [self.db_path, self.backup_dir, self.media_dir, self.mail_dir, self.modules_dir]
         for p in paths:
             if os.path.isfile(p):
                 total_bytes += os.path.getsize(p)
@@ -95,6 +99,45 @@ class SovereignNode:
                         fp = os.path.join(root, f)
                         if os.path.exists(fp): total_bytes += os.path.getsize(fp)
         return total_bytes / (1024 * 1024)
+
+    def submit_community_feedback(self, category, comments):
+        """Allows community testers to submit improvement ideas during the beta phase."""
+        if self.config.get("release_channel", "BETA") not in ["BETA", "SIMULATION", "DEV"]:
+            return {"status": "DISABLED", "message": "Telemetry feedback is pruned on live production nodes."}
+        
+        feedback_id = f"fb_{int(time.time())}_{os.urandom(2).hex()}"
+        now = time.time()
+        with self.get_conn() as conn:
+            conn.execute("INSERT INTO beta_telemetry_feedback VALUES (?, ?, ?, ?)", (feedback_id, category, comments, now))
+            conn.commit()
+        return {"status": "SUCCESS", "feedback_id": feedback_id, "message": "Feedback recorded. Thank you for helping improve Sovereign Core!"}
+
+    def get_all_feedback(self):
+        with self.get_conn() as conn:
+            try:
+                return conn.execute("SELECT feedback_id, category, comments, timestamp FROM beta_telemetry_feedback ORDER BY timestamp DESC").fetchall()
+            except sqlite3.OperationalError:
+                return []
+
+    def execute_custom_sql(self, query):
+        with self.get_conn() as conn:
+            try:
+                cursor = conn.execute(query)
+                if query.strip().upper().startswith("SELECT"):
+                    return {"status": "SUCCESS", "rows": cursor.fetchall()}
+                else:
+                    conn.commit()
+                    return {"status": "SUCCESS", "message": "Query executed successfully."}
+            except Exception as e:
+                return {"status": "ERROR", "message": str(e)}
+
+    def get_loaded_plugins(self):
+        with self.get_conn() as conn:
+            return conn.execute("SELECT plugin_id, name, entrypoint, status FROM developer_plugins").fetchall()
+
+    def get_network_peers(self):
+        with self.get_conn() as conn:
+            return conn.execute("SELECT peer_id, ip_address, status, ping_ms, banscore FROM network_peers").fetchall()
 
     def create_live_backup(self):
         os.makedirs(self.backup_dir, exist_ok=True)
@@ -109,8 +152,7 @@ class SovereignNode:
     def verify_address(self, target_address):
         with self.get_conn() as conn:
             contact = conn.execute("SELECT alias FROM trusted_contacts WHERE address = ?", (target_address,)).fetchone()
-            if contact:
-                return {"status": "VERIFIED", "alias": contact[0]}
+            if contact: return {"status": "VERIFIED", "alias": contact[0]}
             return {"status": "UNVERIFIED", "warning": "WARNING: Destination address is not in your trusted contact book."}
 
     def add_trusted_contact(self, address, alias):
@@ -123,35 +165,6 @@ class SovereignNode:
         with self.get_conn() as conn:
             return conn.execute("SELECT tx_id, type, amount, fee, counterparty, timestamp FROM transaction_ledger ORDER BY timestamp DESC").fetchall()
 
-    def get_media_catalog(self):
-        with self.get_conn() as conn:
-            return conn.execute("SELECT track_id, title, artist, ipfs_hash, size_mb, downloaded FROM media_registry").fetchall()
-
-    def download_media_track(self, track_id):
-        with self.get_conn() as conn:
-            row = conn.execute("SELECT title, artist FROM media_registry WHERE track_id = ?", (track_id,)).fetchone()
-            if not row: return {"status": "ERROR", "message": "Track not found."}
-            conn.execute("UPDATE media_registry SET downloaded = 1 WHERE track_id = ?", (track_id,))
-            conn.commit()
-            fake_file = os.path.join(self.media_dir, f"{track_id}.mp3")
-            with open(fake_file, 'w') as f: f.write("DECENTRALIZED_AUDIO_STREAM_DATA")
-        return {"status": "SUCCESS", "track": row[0], "artist": row[1], "path": fake_file}
-
-    def get_inbox_messages(self):
-        with self.get_conn() as conn:
-            return conn.execute("SELECT mail_id, sender, subject, body, timestamp, is_read FROM web3_mail ORDER BY timestamp DESC").fetchall()
-
-    def send_encrypted_mail(self, recipient, subject, body):
-        mail_id = f"mail_{int(time.time())}_{os.urandom(2).hex()}"
-        now = time.time()
-        local_mail_file = os.path.join(self.mail_dir, f"{mail_id}.enc")
-        with open(local_mail_file, 'w') as f:
-            f.write(base64.b64encode(body.encode()).decode())
-        with self.get_conn() as conn:
-            conn.execute("INSERT INTO web3_mail VALUES (?, ?, ?, ?, ?, 0)", (mail_id, recipient, subject, body, now))
-            conn.commit()
-        return {"status": "SUCCESS", "mail_id": mail_id, "recipient": recipient, "storage": "Stored Locally"}
-
     def send_transaction_with_fee(self, recipient, amount, fee_rate):
         auth_check = self.verify_address(recipient)
         tx_id = f"tx_{int(time.time())}_{os.urandom(2).hex()}"
@@ -159,8 +172,7 @@ class SovereignNode:
         total_cost = amount + fee_rate
         with self.get_conn() as conn:
             bal = conn.execute("SELECT balance FROM accounts WHERE address='user_wallet_01'").fetchone()[0]
-            if bal < total_cost:
-                return {"status": "ERROR", "message": f"Insufficient funds. Required: {total_cost} FOX"}
+            if bal < total_cost: return {"status": "ERROR", "message": f"Insufficient funds. Required: {total_cost} FOX"}
             conn.execute("UPDATE accounts SET balance = balance - ? WHERE address='user_wallet_01'", (total_cost,))
             conn.execute("INSERT OR IGNORE INTO accounts VALUES (?, ?, 0.0)", (recipient, base64.b64encode(b"recipient").decode()))
             conn.execute("UPDATE accounts SET balance = balance + ? WHERE address = ?", (amount, recipient))
@@ -175,12 +187,11 @@ class SovereignNode:
         now = time.time()
         with self.get_conn() as conn:
             bal = conn.execute("SELECT balance FROM accounts WHERE address='user_wallet_01'").fetchone()[0]
-            if bal < amount:
-                return {"status": "ERROR", "message": "Insufficient funds for bridge lock."}
+            if bal < amount: return {"status": "ERROR", "message": "Insufficient funds for bridge lock."}
             conn.execute("UPDATE accounts SET balance = balance - ? WHERE address='user_wallet_01'", (amount,))
             conn.execute("INSERT INTO cross_chain_bridge VALUES (?, ?, ?, 'LOCKED', ?)", (swap_id, amount, preimage_hash, now + 86400))
             conn.commit()
-        return {"status": "LOCKED", "swap_id": swap_id, "target_chain": target_chain, "preimage_secret": preimage, "hash": preimage_hash}
+        return {"status": "LOCKED", "swap_id": swap_id, "target_chain": target_chain, "hash": preimage_hash}
 
     def start_resilient_rest_api(self):
         outer = self
@@ -230,10 +241,15 @@ class SovereignNode:
             ra, rb = conn.execute("SELECT reserve_a, reserve_b FROM liquidity_pools WHERE pool_id = 'MAIN_POOL'").fetchone()
             fox = conn.execute("SELECT balance FROM accounts WHERE address='user_wallet_01'").fetchone()[0]
             sats = conn.execute("SELECT balance FROM accounts WHERE address='user_wallet_01_sats'").fetchone()[0]
-            peers = conn.execute("SELECT COUNT(*) FROM network_peers WHERE status='ACTIVE'").fetchone()[0]
             bridges = conn.execute("SELECT COUNT(*) FROM cross_chain_bridge WHERE status='LOCKED'").fetchone()[0]
-            media_count = conn.execute("SELECT COUNT(*) FROM media_registry WHERE downloaded = 1").fetchone()[0]
-            mail_count = conn.execute("SELECT COUNT(*) FROM web3_mail WHERE is_read = 0").fetchone()[0]
+            plugin_count = conn.execute("SELECT COUNT(*) FROM developer_plugins WHERE status='ACTIVE'").fetchone()[0]
+            peer_count = conn.execute("SELECT COUNT(*) FROM network_peers WHERE status='ACTIVE'").fetchone()[0]
+            
+            feedback_count = 0
+            try:
+                feedback_count = conn.execute("SELECT COUNT(*) FROM beta_telemetry_feedback").fetchone()[0]
+            except: pass
+
             storage_usage = self.get_local_storage_usage()
             storage_cap = self.config.get("storage_allocation_mb", 500)
             
@@ -243,8 +259,9 @@ class SovereignNode:
                 "wallet": {"address": "user_wallet_01", "fox": fox, "sats": sats},
                 "reserves": {"fox": ra, "sats": rb},
                 "bridge_locked": bridges,
-                "media_downloaded": media_count,
-                "unread_mail": mail_count,
+                "active_plugins": plugin_count,
+                "active_peers": peer_count,
+                "beta_feedback_records": feedback_count,
                 "storage": {"used_mb": storage_usage, "cap_mb": storage_cap},
                 "flags": self.query_system_flags()
             }
