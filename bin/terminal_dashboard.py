@@ -1,135 +1,160 @@
 #!/usr/bin/env python3
-import sys, os, time, json
+import sys, os, json, time
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 from rich import print as rprint
 
 sys.path.append(os.path.dirname(__file__))
-from sovereign_core import SovereignNode, HardwareTelemetry
+from sovereign_core import SovereignNode, load_manifest
 
 console = Console()
 node = SovereignNode()
+manifest = load_manifest()
 
-def display_dashboard():
+def toggle_release_channel():
+    current = manifest.get("release_channel", "BETA")
+    manifest["release_channel"] = "DEV" if current == "BETA" else "BETA"
+    path = os.path.expanduser("~/sovereign-ecosystem/fork_manifest.json")
+    with open(path, "w") as f: json.dump(manifest, f, indent=2)
+
+def display_view():
     console.clear()
-    t = HardwareTelemetry.get_metrics()
-    user_fox = node.get_balance("user_wallet_01")
-    user_sats = node.get_balance("user_wallet_01_sats")
-    depin = node.get_balance("depin_pool")
-    res_a, res_b, lp = node.get_pool_info()
-    with node.get_conn() as conn:
-        proofs = conn.cursor().execute("SELECT COUNT(*) FROM depin_proofs").fetchone()[0]
+    state = node.query_full_status()
+    flags = state["flags"]
 
     tbl = Table(show_header=False, box=None, expand=True)
-    tbl.add_column("Key", style="cyan")
-    tbl.add_column("Val", style="bold white", justify="right")
-    
-    tbl.add_row("--- 🔒 Core Node & Security ---", "---")
-    tbl.add_row("Node Profile", f"{node.config['node_profile']} ({t['tier']})")
-    tbl.add_row("Security Status", "[green]AES-256-CBC (WAL Active)[/green]")
-    tbl.add_row("Privacy Posture", f"[yellow]{node.config['privacy_mode'].upper()}[/yellow]")
-    tbl.add_row("CPU / RAM / Disk", f"{t['cpu_pct']}% | {t['ram_pct']}% RAM | {t['disk_pct']}% Disk")
-    
-    tbl.add_row("--- ⛏ DePIN & Mining Channel ---", "---")
-    tbl.add_row("DePIN Yield Pool", f"{depin:,.2f} FOX | Proofs: {proofs}")
-    
-    tbl.add_row("--- ◈ DEX AMM Liquidity Channel ---", "---")
-    tbl.add_row("FOX / SATS Reserve", f"{res_a:,.2f} / {res_b:,.2f}")
-    
-    tbl.add_row("--- ₿ Wallet & Settlement Layer ---", "---")
-    tbl.add_row("User FOX / SATS", f"{user_fox:,.2f} / {user_sats:,.2f}")
-    tbl.add_row("Rotating Logger", "[green]Active (~/sovereign-ecosystem/logs/node.log)[/green]")
+    tbl.add_column("Channel", style="cyan", ratio=1, no_wrap=True)
+    tbl.add_column("State", style="bold white", justify="right", ratio=1, no_wrap=True)
 
-    console.print(Panel(tbl, title="[bold green]Sovereign Core v0.6.1 Control Center & Test Hub[/bold green]", border_style="green"))
+    active_flags = [f for f in flags if f["status"] == "ACTIVE"]
+    if not active_flags:
+        tbl.add_row("--- [bold yellow]📡 Security & Flags[/bold yellow] ---", "---")
+        tbl.add_row("System Integrity", "[bold green]● ALL FLAGS GREEN[/bold green]")
+    else:
+        for f in active_flags:
+            tbl.add_row(f"FLAG: {f['key'][:12]}", f"[yellow]{f['message'][:22]}[/yellow]")
+
+    tbl.add_row("--- [bold magenta]🎵 Web3 Media & Bridge[/bold magenta] ---", "---")
+    tbl.add_row("Cached Audio Tracks", f"{state['media_downloaded']} Downloaded (IPFS)")
+    tbl.add_row("Active HTLC Locks", f"{state['bridge_locked']} Cross-Chain Swaps")
+    tbl.add_row("--- [bold green]₿ AMM DEX & Balances[/bold green] ---", "---")
+    tbl.add_row("FOX / SATS Reserve", f"{state['reserves']['fox']:,.0f} │ {state['reserves']['sats']:,.0f}")
+    tbl.add_row("Local User Wallet", f"{state['wallet']['fox']:.1f} FOX │ {state['wallet']['sats']:,.0f} SATS")
+
+    console.print(Panel(tbl, title=f"[bold green]Sovereign Ecosystem {state['version']} [{state['release_channel']} CHANNEL][/bold green]", border_style="green"))
 
 if __name__ == "__main__":
     try:
+        page = 1
         while True:
-            display_dashboard()
-            rprint("\n[bold cyan]Ecosystem Channels & Actions:[/bold cyan]")
-            rprint("  [1] ⛏  Trigger DePIN Proof-of-Compute Mining")
-            rprint("  [2] ◈  Swap 10 FOX -> SATS (AMM DEX)")
-            rprint("  [3] ◈  Swap 1000 SATS -> FOX (AMM DEX)")
-            rprint("  [4] 🧪 Run Automated E2E Test Suite")
-            rprint("  [5] 🛡  Run Diagnostics & Security Audit")
-            rprint("  [6] 💬 Open Prompt Assistant (/help)")
-            rprint("  [7] 🚪 Exit Control Center")
+            display_view()
+            state = node.query_full_status()
+            ch = state["release_channel"]
             
-            try:
-                choice = input("\nEnter option [1-7] or command: ").strip()
-            except (KeyboardInterrupt, EOFError):
-                rprint("\n[yellow]Shutdown signal received.[/yellow]")
-                break
-
-            if choice.startswith("/"):
-                parts = choice.split()
-                cmd = parts[0].lower()
-                if cmd == "/help":
-                    rprint("\n[cyan]Crypto Prompt Assistant Commands:[/cyan]")
-                    rprint("  /mine          - Execute DePIN PoC mining")
-                    rprint("  /swap <amount> - Swap FOX to SATS")
-                    rprint("  /balance       - Check self-custody balances")
-                    rprint("  /audit         - Run security diagnostics")
-                elif cmd == "/mine":
-                    res = node.mine_depin_proof()
-                    rprint(f"\n[green]✓[/green] Mined successfully! Reward: +{res.get('reward', 0)} FOX")
-                elif cmd == "/swap":
-                    amt = float(parts[1]) if len(parts) > 1 else 10.0
-                    res = node.execute_amm_swap(amt, True)
-                    rprint(f"\n[green]✓[/green] Swapped {amt} FOX for [bold]{res['amount_out']:.2f} SATS[/bold]")
-                elif cmd == "/balance":
-                    rprint(f"\n[green]✓[/green] FOX: {node.get_balance('user_wallet_01')} | SATS: {node.get_balance('user_wallet_01_sats')}")
-                elif cmd == "/audit":
-                    diag = node.run_diagnostics()
-                    rprint(f"\n[green]✓[/green] {diag['status']}: {diag['detail']}")
-                else:
-                    rprint(f"\n[red]Unknown command '{cmd}'. Type /help for assistance.[/red]")
-                input("\nPress [Enter] to continue...")
-                continue
-
-            if choice == "1":
-                rprint("\n[yellow]>[/yellow] Mining DePIN proof...")
-                res = node.mine_depin_proof()
-                rprint(f"[green]✓[/green] Mined successfully! Reward: +{res.get('reward', 0)} FOX")
-            elif choice == "2":
-                res = node.execute_amm_swap(10.0, True)
-                rprint(f"\n[green]✓[/green] Swapped 10 FOX for [bold]{res['amount_out']:.2f} SATS[/bold]")
-            elif choice == "3":
-                res = node.execute_amm_swap(1000.0, False)
-                rprint(f"\n[green]✓[/green] Swapped 1000 SATS for [bold]{res['amount_out']:.2f} FOX[/bold]")
-            elif choice == "4":
-                rprint("\n[yellow]>[/yellow] Executing Automated E2E Test Suite...")
-                import subprocess
-                subprocess.run([sys.executable, "tests/test_suite.py"])
-            elif choice == "5":
-                diag = node.run_diagnostics()
-                rprint(f"\n[green]✓[/green] {diag['status']}: {diag['detail']}")
-            elif choice == "6":
-                rprint("\n[cyan]💬 Prompt Assistant Mode Activated![/cyan]")
-                p_cmd = input("prompt> ").strip()
-                if p_cmd.startswith("/help"):
-                    rprint("Commands: /mine, /swap <amt>, /balance, /audit")
-                elif p_cmd.startswith("/mine"):
-                    res = node.mine_depin_proof()
-                    rprint(f"[green]✓[/green] Mined! Reward: +{res.get('reward', 0)} FOX")
-                elif p_cmd.startswith("/swap"):
-                    amt = float(p_cmd.split()[1]) if len(p_cmd.split()) > 1 else 10.0
-                    res = node.execute_amm_swap(amt, True)
-                    rprint(f"[green]✓[/green] Swapped {amt} FOX for {res['amount_out']:.2f} SATS")
-                elif p_cmd.startswith("/balance"):
-                    rprint(f"[green]✓[/green] FOX: {node.get_balance('user_wallet_01')} | SATS: {node.get_balance('user_wallet_01_sats')}")
-                elif p_cmd.startswith("/audit"):
-                    diag = node.run_diagnostics()
-                    rprint(f"[green]✓[/green] {diag['status']}: {diag['detail']}")
-                else:
-                    rprint("[red]Unknown command.[/red]")
-            elif choice == "7":
-                rprint("\n[yellow]Exiting control center safely.[/yellow]")
-                break
-            else:
-                rprint("\n[red]Invalid option. Please choose between 1 and 7.[/red]")
-            
-            input("\nPress [Enter] to continue...")
+            if page == 1:
+                rprint(f"\n[bold cyan]Bare-Metal Operations Menu [Page 1/3] ({ch}):[/bold cyan]")
+                rprint("  [1] 📥 Receive Funds (View Address & QR Data)")
+                rprint("  [2] 💸 Send Transaction (Custom Fee Selection & Poison Guard)")
+                rprint("  [3] 🌉 Initiate HTLC Cross-Chain Bridge Swap")
+                rprint("  [4] 🎵 Open Decentralized Media & Download Center")
+                rprint("  [5] ➡️  Go to Menu Page 2")
+                rprint("  [6] 🚪 Exit System")
+                choice = input("\nSelect [1-6]: ").strip()
+                if choice == "1":
+                    rprint(f"\n[bold green]Your Receiving Address:[/bold green]\n  {state['wallet']['address']}")
+                    input("\nPress [Enter] to return...")
+                elif choice == "2":
+                    rprint("\n[bold cyan]Protected Transfer Terminal:[/bold cyan]")
+                    recipient = input("Enter recipient address: ").strip()
+                    try:
+                        amount = float(input("Enter amount of FOX to send: ").strip())
+                        fee_rate = 0.5
+                        check = node.verify_address(recipient)
+                        rprint(f"\n[yellow]Address Verification:[/yellow] {check}")
+                        if input("Confirm send? (y/N): ").strip().lower() == 'y':
+                            res = node.send_transaction_with_fee(recipient, amount, fee_rate)
+                            rprint(f"\n[green]Result:[/green] {res}")
+                    except ValueError:
+                        rprint("[red]Invalid input.[/red]")
+                    input("\nPress [Enter] to return...")
+                elif choice == "3":
+                    rprint("\n[bold cyan]Cross-Chain HTLC Bridge:[/bold cyan]")
+                    target_chain = input("Destination chain (e.g. EVM-L2): ").strip() or "EVM-L2"
+                    try:
+                        amt = float(input("Amount to lock: ").strip() or "10")
+                        res = node.initiate_htlc_bridge(amt, target_chain)
+                        rprint(f"\n[green]Locked Successfully:[/green] {res}")
+                    except ValueError:
+                        rprint("[red]Invalid input.[/red]")
+                    input("\nPress [Enter] to return...")
+                elif choice == "4":
+                    rprint("\n[bold cyan]Decentralized Media & Download Center (Audius-Style):[/bold cyan]")
+                    catalog = node.get_media_catalog()
+                    for item in catalog:
+                        status = "[green]Downloaded[/green]" if item[5] else "[yellow]Available for Sync[/yellow]"
+                        rprint(f"  • ID: [cyan]{item[0]}[/cyan] | {item[1]} by {item[2]} ({item[4]} MB) - {status}")
+                    tid = input("\nEnter Track ID to download/cache locally (or press Enter): ").strip()
+                    if tid:
+                        res = node.download_media_track(tid)
+                        rprint(f"\n[green]Download Complete:[/green] {res}")
+                    input("\nPress [Enter] to return...")
+                elif choice == "5":
+                    page = 2
+                elif choice == "6":
+                    break
+            elif page == 2:
+                rprint(f"\n[bold cyan]Bare-Metal Operations Menu [Page 2/3] ({ch}):[/bold cyan]")
+                rprint("  [1] 📜 View Transaction History Ledger")
+                rprint("  [2] 📇 Manage Trusted Contacts (Address Book)")
+                rprint("  [3] ◈ Execute Protected DEX Swap (10 FOX)")
+                rprint("  [4] 🗺️ View Project Roadmap & Listing Milestones")
+                rprint("  [5] ➡️  Go to Menu Page 3")
+                rprint("  [6] ⬅️  Return to Menu Page 1")
+                choice = input("\nSelect [1-6]: ").strip()
+                if choice == "1":
+                    rprint("\n[bold cyan]Transaction Ledger History:[/bold cyan]")
+                    for t in node.get_transaction_history():
+                        rprint(f"  • TX: {t[0]} | Amt: {t[2]} FOX | To: {t[4]}")
+                    input("\nPress [Enter] to return...")
+                elif choice == "2":
+                    addr = input("Contact address: ").strip()
+                    alias = input("Contact alias: ").strip()
+                    if addr and alias:
+                        rprint(f"\n[green]{node.add_trusted_contact(addr, alias)['message']}[/green]")
+                    input("\nPress [Enter] to return...")
+                elif choice == "3":
+                    res = node.execute_protected_swap_query(10.0)
+                    rprint(f"\n[green]Swap Result:[/green] {res}")
+                    input("\nPress [Enter] to return...")
+                elif choice == "4":
+                    rm = state.get("roadmap", {})
+                    rprint(Panel(f"[bold]Phase:[/bold] {rm.get('current_phase')}\n[bold]Milestone:[/bold] {rm.get('next_milestone')}", title="Roadmap", border_style="cyan"))
+                    input("\nPress [Enter] to return...")
+                elif choice == "5":
+                    page = 3
+                elif choice == "6":
+                    page = 1
+            elif page == 3:
+                rprint(f"\n[bold cyan]Bare-Metal Operations Menu [Page 3/3] ({ch}):[/bold cyan]")
+                rprint("  [1] 🔄 Toggle Release Channel (BETA ⇄ DEV)")
+                rprint("  [2] 💾 Backup Database (VACUUM INTO Snapshot)")
+                rprint("  [3] ⬅️  Return to Menu Page 2")
+                rprint("  [4] 🚪 Exit System")
+                choice = input("\nSelect [1-4]: ").strip()
+                if choice == "1":
+                    toggle_release_channel()
+                    manifest = load_manifest()
+                    node.config = manifest
+                    rprint(f"\n[green]Channel switched to: {manifest.get('release_channel')}[/green]")
+                    time.sleep(1)
+                elif choice == "2":
+                    res = node.create_live_backup()
+                    rprint(f"\n[green]Backup Secured:[/green] {res}")
+                    input("\nPress [Enter] to return...")
+                elif choice == "3":
+                    page = 2
+                elif choice == "4":
+                    break
     except KeyboardInterrupt:
-        rprint("\n[yellow]Control center closed via interrupt.[/yellow]")
+        pass

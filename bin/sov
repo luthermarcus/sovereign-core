@@ -1,0 +1,53 @@
+#!/usr/bin/env python3
+import sys, os, argparse, json
+sys.path.append(os.path.dirname(__file__))
+from sovereign_core import SovereignNode
+
+parser = argparse.ArgumentParser(description="Sovereign Micro-OS Executive Command Layer")
+subparsers = parser.add_subparsers(dest="command")
+
+# Status
+subparsers.add_parser("status", help="Display full JSON system state")
+
+# Flags
+flag_parser = subparsers.add_parser("flags", help="Inspect and remediate active flags")
+flag_parser.add_argument("--clear", type=str, help="Clear flag by key name")
+flag_parser.add_argument("--block-ip", type=str, help="Blacklist a suspect IP address")
+
+# Mail
+mail_parser = subparsers.add_parser("mail", help="Web3 encrypted mailbox tools")
+mail_parser.add_argument("--inbox", action="store_true", help="List inbox messages")
+mail_parser.add_argument("--read", type=str, help="Read specific mail ID")
+mail_parser.add_argument("--send", nargs=3, metavar=("RECIPIENT", "SUBJECT", "BODY"), help="Send encrypted message")
+
+# Swap
+swap_parser = subparsers.add_parser("swap", help="Execute protected AMM swap")
+swap_parser.add_argument("amount", type=float, help="Amount of FOX to swap")
+
+args = parser.parse_args()
+node = SovereignNode()
+
+if args.command == "status":
+    print(json.dumps(node.query_full_status(), indent=2))
+elif args.command == "flags":
+    if args.clear:
+        node.clear_flag(args.clear)
+        print(f"Flag '{args.clear}' cleared.")
+    elif args.block_ip:
+        node.blacklist_ip(args.block_ip, "Manual user block via CLI")
+        print(f"IP '{args.block_ip}' blacklisted in firewall.")
+    else:
+        print(json.dumps(node.query_system_flags(), indent=2))
+elif args.command == "mail":
+    if args.inbox:
+        print(json.dumps(node.get_inbox(), indent=2))
+    elif args.read:
+        res = node.read_mail(args.read)
+        print(json.dumps(res, indent=2) if res else "Message not found.")
+    elif args.send:
+        rcpt, subj, body = args.send
+        print(json.dumps(node.send_encrypted_mail(rcpt, subj, body), indent=2))
+elif args.command == "swap":
+    print(json.dumps(node.execute_protected_swap_query(args.amount), indent=2))
+else:
+    parser.print_help()

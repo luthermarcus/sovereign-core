@@ -1,0 +1,22 @@
+{
+  "network_name": "Sovereign OS",
+  "version": "v2.7.1",
+  "base_ticker": "FOX",
+  "quote_ticker": "SATS",
+  "db_path": "~/node-stack/sovereign_os_v271.db",
+  "primary_rest_port": 8080,
+  "release_channel": "DEV",
+  "dashboard_mode": "USER",
+  "max_price_impact_percent": 2.0,
+  "roadmap": {
+    "current_phase": "Phase V: Decentralized Media & Release Channels",
+    "next_milestone": "v3.0.0 Mainnet Regtest Candidate & Security Audit",
+    "target_release": "Q3 2026",
+    "community_governance": "BIP 9 Versionbits Signaling Active"
+  },
+  "governance": {
+    "founder_allocation_pct": 5.0,
+    "vesting_cliff_months": 12,
+    "allocation_purpose": "Protocol Infrastructure, Core Maintenance & Audit War Chest"
+  }
+}
