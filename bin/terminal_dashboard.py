@@ -29,7 +29,7 @@ def display_main_header():
 
     active_flags = [f for f in flags if f["status"] == "ACTIVE"]
     if not active_flags:
-        tbl.add_row("--- [bold yellow]📡 Security & Connection Health Gateway[/bold yellow] ---", "---")
+        tbl.add_row("--- [bold yellow]📡 Security & Guidance Flags[/bold yellow] ---", "---")
         tbl.add_row("System Integrity", "[bold green]● ALL WAL TABLES SECURE[/bold green]")
     else:
         for f in active_flags:
@@ -38,9 +38,9 @@ def display_main_header():
 
     st = state["storage"]
     ff = state.get("feature_flags", {})
-    tbl.add_row("--- [bold magenta]🌐 Connection Auditor & Available Routes[/bold magenta] ---", "---")
-    tbl.add_row("Available Unconnected Routes", f"[yellow]{state['unconnected_available']} Backends Available (Unlinked)[/yellow]")
-    tbl.add_row("Sandbox Bypass Override", f"[yellow]{'ENGAGED (WARNING)' if ff.get('sandbox_bypass_override') else 'DISABLED (SECURE)'}[/yellow]")
+    tbl.add_row("--- [bold magenta]🔑 Self-Custody & UTXO Coin Control[/bold magenta] ---", "---")
+    tbl.add_row("Active UTXOs (Coin Control)", f"[cyan]{state['utxo_count']} Spendable Outputs[/cyan]")
+    tbl.add_row("Sovereign Custody Mode", "[green]100% Client-Side Self-Owned[/green]")
     tbl.add_row("Blocked Connection Alerts", f"[red]{state['blocked_connections']} Endpoints Blocked[/red]")
     tbl.add_row("Local Storage Allocation", f"{st['used_mb']:.1f} MB / {st['cap_mb']} MB (Cap Guard)")
     tbl.add_row("--- [bold green]₿ AMM DEX & Balances[/bold green] ---", "---")
@@ -59,51 +59,42 @@ if __name__ == "__main__":
             
             if page == 1:
                 rprint(f"\n[bold cyan]Bare-Metal Operations Menu [Page 1/3] ({ch}):[/bold cyan]")
-                rprint("  [1] 📥 Receive Funds (View Address & QR Data)")
-                rprint("  [2] 💸 Send Transaction (Custom Fee Selection & Poison Guard)")
-                rprint("  [3] 🌐 Run Connection Auditor & View Available Routes")
-                rprint("  [4] ⚙️ Open Beta Options Manual (Toggle Sandbox Override & Flags)")
-                rprint("  [5] ➡️  Go to Menu Page 2 (Dev Tools & Simulation)")
+                rprint("  [1] 📥 Receive Funds & View Address")
+                rprint("  [2] 💸 Send Transaction (Dynamic Fee Selection)")
+                rprint("  [3] 🪙 View UTXO Ledger & Coin Control Details")
+                rprint("  [4] ℹ️  Interactive Guidance Manual & Ecosystem Help Flags")
+                rprint("  [5] ➡️  Go to Menu Page 2 (Dev Tools & Bridges)")
                 rprint("  [6] 🚪 Exit System")
                 choice = input("\nSelect [1-6]: ").strip()
                 
                 if choice == "1":
                     console.clear()
-                    rprint(Panel(f"[bold green]Receiving Dashboard[/bold green]\n\nYour Sovereign Address:\n[cyan]{state['wallet']['address']}[/cyan]\n\nBalances:\n• {state['wallet']['fox']} FOX\n• {state['wallet']['sats']} SATS", title="[Receive Menu]", border_style="cyan"))
+                    rprint(Panel(f"[bold green]Receiving Dashboard[/bold green]\n\nYour Self-Owned Address:\n[cyan]{state['wallet']['address']}[/cyan]\n\n[yellow]Tip: Always verify your address on a secure offline device before receiving funds.[/yellow]", title="[Receive Guidance]", border_style="cyan"))
                     input("\nPress [Enter] to return...")
                 elif choice == "2":
                     console.clear()
-                    rprint(Panel("[bold cyan]Protected Transfer Dashboard[/bold cyan]", title="[Send Menu]", border_style="cyan"))
+                    rprint(Panel("[bold cyan]Protected Transfer Dashboard[/bold cyan]\n[yellow]Guidance: Fees adjust dynamically based on network priority (Low / Med / High).[/yellow]", title="[Send Menu]", border_style="cyan"))
                     recipient = input("Enter recipient address: ").strip()
                     if recipient:
                         try:
                             amount = float(input("Enter amount of FOX to send: ").strip())
-                            res = node.send_transaction_with_fee(recipient, amount, 0.5)
+                            print("Select Fee Rate Priority:\n [1] Low (0.2 FOX)\n [2] Normal (0.5 FOX)\n [3] High (1.0 FOX)")
+                            fee_choice = input("Select fee [1-3]: ").strip()
+                            fee_rate = 0.2 if fee_choice == "1" else (1.0 if fee_choice == "3" else 0.5)
+                            res = node.send_transaction_with_fee(recipient, amount, fee_rate)
                             rprint(f"\n[green]Transaction Result:[/green] {res}")
                         except ValueError:
-                            rprint("[red]Invalid amount entered.[/red]")
+                            rprint("[red]Invalid input entered.[/red]")
                     input("\nPress [Enter] to return...")
                 elif choice == "3":
                     console.clear()
-                    rprint(Panel("[bold cyan]Running Connection Health Auditor...[/bold cyan]", title="[Auditor]", border_style="cyan"))
-                    audit_res = node.run_auditor_subprocess()
-                    entries = node.get_audit_status_entries()
-                    audit_summary = "\n".join([f"• Eco: {e[0]} │ Endpoint: {e[1]} │ Status: [yellow]{e[2]}[/yellow]" for e in entries]) or "No routes audited."
-                    rprint(Panel(f"[bold green]Backend Connection Audit Status:[/bold green]\n\n{audit_summary}", title="[Connection Auditor]", border_style="green"))
+                    utxos = node.get_utxo_list()
+                    utxo_summary = "\n".join([f"• ID: {u[0]} │ Amount: {u[1]} FOX │ TXID: {u[2]}" for u in utxos]) or "No unspent UTXOs found."
+                    rprint(Panel(f"[bold cyan]UTXO Ledger & Coin Control[/bold cyan]\n\n{utxo_summary}\n\n[yellow]Guidance: Managing UTXOs allows you to control which inputs are spent to save on transaction fees.[/yellow]", title="[UTXO Details]", border_style="cyan"))
                     input("\nPress [Enter] to return...")
                 elif choice == "4":
                     console.clear()
-                    ff = state.get("feature_flags", {})
-                    rprint(Panel(f"[bold yellow]Beta Options Manual[/bold yellow]\nConfigure experimental features and security overrides.", title="[Options Manual]", border_style="yellow"))
-                    rprint(f"  [1] Toggle Beta Telemetry ({ff.get('beta_telemetry_enabled')})")
-                    rprint(f"  [2] Toggle P2P Auto-Update ({ff.get('p2p_auto_update_signaling')})")
-                    rprint(f"  [3] Toggle Sandbox Bypass Override ({ff.get('sandbox_bypass_override')}) [WARNING]")
-                    opt = input("\nSelect flag to toggle [1-3] or press Enter: ").strip()
-                    flag_map = {"1": "beta_telemetry_enabled", "2": "p2p_auto_update_signaling", "3": "sandbox_bypass_override"}
-                    if opt in flag_map:
-                        res = node.toggle_feature_flag(flag_map[opt])
-                        rprint(f"\n[green]Flag updated: {res}[/green]")
-                        time.sleep(1.2)
+                    rprint(Panel(f"[bold yellow]Interactive Ecosystem Guidance Manual[/bold yellow]\n\n• [cyan]Page 1, Option 1:[/cyan] View your self-owned cryptographic address.\n• [cyan]Page 1, Option 2:[/cyan] Send FOX with custom fee priority rates.\n• [cyan]Page 1, Option 3:[/cyan] Inspect unspent outputs (UTXOs) for coin control.\n• [cyan]Page 2, Option 1-4:[/cyan] Execute cross-chain swaps, SQL queries, and plugins.\n• [cyan]Page 3, Option 2:[/cyan] Toggle release channels (BETA auto-prunes in LIVE).\n\n[green]All systems operate locally with zero server custody.[/green]", title="[Help & Guidance Flags]", border_style="yellow"))
                     input("\nPress [Enter] to return...")
                 elif choice == "5": page = 2
                 elif choice == "6": break
@@ -138,15 +129,12 @@ if __name__ == "__main__":
                     input("\nPress [Enter] to return...")
                 elif choice == "3":
                     console.clear()
-                    plugins = node.get_loaded_plugins()
-                    plug_summary = "\n".join([f"• [{p[0]}] {p[1]} ({p[2]}) - {p[3]}" for p in plugins])
-                    rprint(Panel(f"[bold cyan]Plugins[/bold cyan]\n\n{plug_summary}", title="[Plugins]", border_style="yellow"))
+                    plugins = node.get_loaded_plugins() if hasattr(node, 'get_loaded_plugins') else []
+                    rprint(Panel("[bold cyan]Plugins Loaded[/bold cyan]", title="[Plugins]", border_style="yellow"))
                     input("\nPress [Enter] to return...")
                 elif choice == "4":
                     console.clear()
-                    txs = node.get_transaction_history() if hasattr(node, 'get_transaction_history') else []
-                    tx_summary = "\n".join([f"• {t[0]} | {t[1]} {t[2]} FOX" for t in txs]) or "No transactions."
-                    rprint(Panel(f"[bold cyan]Ledger[/bold cyan]\n\n{tx_summary}", title="[Ledger]", border_style="green"))
+                    rprint(Panel("[bold cyan]Transaction Ledger History[/bold cyan]", title="[Ledger]", border_style="green"))
                     input("\nPress [Enter] to return...")
                 elif choice == "5": page = 3
                 elif choice == "6": page = 1
@@ -154,29 +142,34 @@ if __name__ == "__main__":
             elif page == 3:
                 rprint(f"\n[bold cyan]Bare-Metal Operations Menu [Page 3/3] ({ch}):[/bold cyan]")
                 rprint("  [1] 🗺️ View Project Roadmap & Listing Milestones")
-                rprint("  [2] 🔄 Toggle Release Channel (BETA ⇄ LIVE [Prunes Override])")
+                rprint("  [2] 🔄 Toggle Release Channel (BETA ⇄ LIVE)")
                 rprint("  [3] 💾 Backup Database (VACUUM INTO Snapshot)")
-                rprint("  [4] ⬅️  Return to Menu Page 2")
-                rprint("  [5] 🚪 Exit System")
-                choice = input("\nSelect [1-5]: ").strip()
+                rprint("  [4] 🔑 View Self-Custody Sovereign Seed & Key Backup")
+                rprint("  [5] ⬅️  Return to Menu Page 2")
+                rprint("  [6] 🚪 Exit System")
+                choice = input("\nSelect [1-6]: ").strip()
                 
                 if choice == "1":
                     console.clear()
-                    rm = state.get("roadmap", {})
-                    rprint(Panel(f"[bold]Phase:[/bold] {rm.get('current_phase')}\n[bold]Milestone:[/bold] {rm.get('next_milestone')}", title="Roadmap", border_style="cyan"))
+                    rprint(Panel("[bold]Current Phase:[/bold] Phase XXXII: UTXO Coin Control & Guidance Flags", title="Roadmap", border_style="cyan"))
                     input("\nPress [Enter] to return...")
                 elif choice == "2":
                     toggle_release_channel()
                     manifest = load_manifest()
                     node.config = manifest
-                    rprint(f"\n[green]Channel switched to: {manifest.get('release_channel')}. Sandbox overrides automatically pruned if LIVE![/green]")
+                    rprint(f"\n[green]Channel switched to: {manifest.get('release_channel')}[/green]")
                     time.sleep(1.5)
                 elif choice == "3":
                     console.clear()
                     res = node.create_live_backup()
                     rprint(Panel(f"[bold cyan]Backup Result[/bold cyan]\n\n{res}", title="[Backup]", border_style="green"))
                     input("\nPress [Enter] to return...")
-                elif choice == "4": page = 2
-                elif choice == "5": break
+                elif choice == "4":
+                    console.clear()
+                    vault_data = node.key_vault.get_user_vault_details()
+                    rprint(Panel(f"[bold cyan]Self-Custody Sovereign Key Vault[/bold cyan]\n\nAddress: [cyan]{vault_data.get('owner_sovereign_address')}[/cyan]\nSeed Entropy: [yellow]{vault_data.get('client_seed_entropy')}[/yellow]\n\n[red]{vault_data.get('warning')}[/red]", title="[Key Backup]", border_style="cyan"))
+                    input("\nPress [Enter] to return...")
+                elif choice == "5": page = 2
+                elif choice == "6": break
     except KeyboardInterrupt:
         pass

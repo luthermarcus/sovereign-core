@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 import os, json, sqlite3, hashlib, time, socket, threading, base64, glob, subprocess
 from http.server import BaseHTTPRequestHandler, HTTPServer
+import sys
+sys.path.append(os.path.dirname(__file__))
+from sovereign_key_vault import SelfCustodyKeyVault
 
 def load_manifest():
     path = os.path.expanduser("~/sovereign-ecosystem/fork_manifest.json")
@@ -11,7 +14,7 @@ def load_manifest():
 class SovereignNode:
     def __init__(self):
         self.config = load_manifest()
-        self.db_path = os.path.expanduser(self.config.get("db_path", "~/node-stack/sovereign_os_v2910.db"))
+        self.db_path = os.path.expanduser(self.config.get("db_path", "~/node-stack/sovereign_os_v2912.db"))
         self.backup_dir = os.path.expanduser("~/sovereign-ecosystem/backups")
         self.media_dir = os.path.expanduser("~/sovereign-ecosystem/media_cache")
         self.mail_dir = os.path.expanduser("~/sovereign-ecosystem/mail")
@@ -19,8 +22,9 @@ class SovereignNode:
         self.vault_path = os.path.expanduser("~/sovereign-ecosystem/vault/master.key")
         self.auth_cookie_path = os.path.expanduser("~/sovereign-ecosystem/vault/rpc_auth.cookie")
         self.bound_rest_port = None
-        self.current_version = "v2.9.10-beta"
+        self.current_version = "v2.9.12-beta"
 
+        self.key_vault = SelfCustodyKeyVault()
         self._init_security_vaults()
         self.run_adaptive_diagnostics_and_pruning()
         self.start_resilient_rest_api()
@@ -56,62 +60,44 @@ class SovereignNode:
         
         with self.get_conn() as conn:
             conn.execute("CREATE TABLE IF NOT EXISTS accounts (address TEXT PRIMARY KEY, cipher_payload TEXT, balance REAL CHECK(balance >= 0))")
+            conn.execute("CREATE TABLE IF NOT EXISTS utxo_ledger (utxo_id TEXT PRIMARY KEY, address TEXT, amount REAL, is_spent INTEGER, txid TEXT)")
             conn.execute("CREATE TABLE IF NOT EXISTS liquidity_pools (pool_id TEXT PRIMARY KEY, reserve_a REAL, reserve_b REAL)")
             conn.execute("CREATE TABLE IF NOT EXISTS system_flags (flag_key TEXT PRIMARY KEY, level TEXT, status TEXT, message TEXT, timestamp REAL)")
             conn.execute("CREATE TABLE IF NOT EXISTS network_peers (peer_id TEXT PRIMARY KEY, ip_address TEXT, version TEXT, status TEXT, ping_ms REAL, banscore INTEGER, last_seen REAL)")
             conn.execute("CREATE TABLE IF NOT EXISTS transaction_ledger (tx_id TEXT PRIMARY KEY, type TEXT, amount REAL, fee REAL, counterparty TEXT, timestamp REAL)")
             conn.execute("CREATE TABLE IF NOT EXISTS cross_chain_bridge (swap_id TEXT PRIMARY KEY, amount REAL, preimage_hash TEXT, status TEXT, expires_at REAL)")
             conn.execute("CREATE TABLE IF NOT EXISTS trusted_contacts (address TEXT PRIMARY KEY, alias TEXT)")
-            conn.execute("CREATE TABLE IF NOT EXISTS media_registry (track_id TEXT PRIMARY KEY, title TEXT, artist TEXT, ipfs_hash TEXT, size_mb REAL, downloaded INTEGER)")
-            conn.execute("CREATE TABLE IF NOT EXISTS web3_mail (mail_id TEXT PRIMARY KEY, sender TEXT, subject TEXT, body TEXT, timestamp REAL, is_read INTEGER)")
-            conn.execute("CREATE TABLE IF NOT EXISTS developer_plugins (plugin_id TEXT PRIMARY KEY, name TEXT, entrypoint TEXT, status TEXT)")
             conn.execute("CREATE TABLE IF NOT EXISTS connection_firewall_log (firewall_id TEXT PRIMARY KEY, endpoint TEXT, action TEXT, reason TEXT, timestamp REAL)")
-            conn.execute("CREATE TABLE IF NOT EXISTS network_stress_alerts (alert_id TEXT PRIMARY KEY, peer_id TEXT, signal_type TEXT, status TEXT, timestamp REAL)")
-            conn.execute("CREATE TABLE IF NOT EXISTS network_knowledge_base (ecosystem_id TEXT PRIMARY KEY, endpoint TEXT, protocol_version TEXT, health_score REAL, indexed_at REAL)")
-            conn.execute("CREATE TABLE IF NOT EXISTS connection_audit_status (ecosystem_id TEXT PRIMARY KEY, endpoint TEXT, connection_status TEXT, last_checked REAL)")
 
             if channel in ["BETA", "SIMULATION", "DEV"]:
-                conn.execute("CREATE TABLE IF NOT EXISTS beta_telemetry_feedback (feedback_id TEXT PRIMARY KEY, subsystem TEXT, comments TEXT, status TEXT, timestamp REAL)")
                 if ff.get("sandbox_bypass_override"):
                     conn.execute("INSERT OR REPLACE INTO system_flags VALUES ('SANDBOX_BYPASS', 'WARN', 'ACTIVE', 'Encrypted Sandbox Override Engaged', ?)", (time.time(),))
                 else:
                     conn.execute("DELETE FROM system_flags WHERE flag_key='SANDBOX_BYPASS'")
             else:
-                conn.execute("DROP TABLE IF EXISTS beta_telemetry_feedback;")
                 conn.execute("DROP TABLE IF EXISTS connection_firewall_log;")
-                conn.execute("DROP TABLE IF EXISTS network_stress_alerts;")
-                conn.execute("DROP TABLE IF EXISTS network_knowledge_base;")
-                conn.execute("DROP TABLE IF EXISTS connection_audit_status;")
                 conn.execute("DELETE FROM system_flags WHERE flag_key='SANDBOX_BYPASS'")
 
-            # Seed default data
-            conn.execute("INSERT OR IGNORE INTO accounts VALUES ('user_wallet_01', ?, 250.0)", (base64.b64encode(b"user").decode(),))
-            conn.execute("INSERT OR IGNORE INTO accounts VALUES ('user_wallet_01_sats', ?, 50000.0)", (base64.b64encode(b"sats").decode(),))
+            vault_info = self.key_vault.get_user_vault_details()
+            user_addr = vault_info.get("owner_sovereign_address", "sov1_default")
+
+            conn.execute("INSERT OR IGNORE INTO accounts VALUES (?, ?, 250.0)", (user_addr, base64.b64encode(b"user").decode(),))
+            conn.execute("INSERT OR IGNORE INTO accounts VALUES (?, ?, 50000.0)", (f"{user_addr}_sats", base64.b64encode(b"sats").decode(),))
+            conn.execute("INSERT OR IGNORE INTO utxo_ledger VALUES ('utxo_genesis_01', ?, 150.0, 0, 'txid_gen_1')", (user_addr,))
+            conn.execute("INSERT OR IGNORE INTO utxo_ledger VALUES ('utxo_genesis_02', ?, 100.0, 0, 'txid_gen_2')", (user_addr,))
             conn.execute("INSERT OR IGNORE INTO liquidity_pools VALUES ('MAIN_POOL', 10000.0, 500000.0)")
             conn.execute("INSERT OR IGNORE INTO trusted_contacts VALUES ('0xVerifiedColdStorage', 'Primary Vault')")
-            conn.execute("INSERT OR IGNORE INTO media_registry VALUES ('track_01', 'Genesis Block Symphony', 'Satoshi Sound', 'QmHashGenesis123', 4.2, 1)")
-            conn.execute("INSERT OR IGNORE INTO developer_plugins VALUES ('plugin_sandbox_01', 'Core Debugger', 'debug.py', 'ACTIVE')")
             
             now = time.time()
-            conn.execute("INSERT OR IGNORE INTO network_peers VALUES ('peer_node_alpha', '10.0.0.1', 'v2.9.10-beta', 'ACTIVE', 12.5, 0, ?)", (now,))
+            conn.execute("INSERT OR IGNORE INTO network_peers VALUES ('peer_node_alpha', '10.0.0.1', 'v2.9.12-beta', 'ACTIVE', 12.5, 0, ?)", (now,))
             conn.execute("INSERT OR IGNORE INTO connection_firewall_log VALUES ('fw_sample_01', '198.51.100.42:9050', 'BLOCKED', 'Untrusted external scraper IP blocked by Sovereign Firewall.', ?)", (now - 300,))
-            conn.execute("INSERT OR IGNORE INTO network_knowledge_base VALUES ('ecosystem_alpha_hub', '10.0.0.15:8080', 'v2.9.10-beta', 98.5, ?)", (now,))
-            conn.execute("INSERT OR IGNORE INTO network_knowledge_base VALUES ('ecosystem_beta_mesh', '192.168.1.50:9000', 'v2.9.9-beta', 91.0, ?)", (now,))
-            conn.execute("INSERT OR IGNORE INTO connection_audit_status VALUES ('ecosystem_alpha_hub', '10.0.0.15:8080', 'AVAILABLE_UNCONNECTED', ?)", (now,))
-            conn.execute("INSERT OR IGNORE INTO connection_audit_status VALUES ('ecosystem_beta_mesh', '192.168.1.50:9000', 'AVAILABLE_UNCONNECTED', ?)", (now,))
             conn.commit()
 
-    def run_auditor_subprocess(self):
-        auditor_path = os.path.expanduser("~/sovereign-ecosystem/bin/sovereign_crawler.py")
-        try:
-            res = subprocess.run(["python3", auditor_path], capture_output=True, text=True, timeout=10)
-            return {"status": "SUCCESS", "output": res.stdout.strip()}
-        except Exception as e:
-            return {"status": "ERROR", "message": str(e)}
-
-    def get_audit_status_entries(self):
+    def get_utxo_list(self):
+        vault_info = self.key_vault.get_user_vault_details()
+        user_addr = vault_info.get("owner_sovereign_address", "sov1_default")
         with self.get_conn() as conn:
-            return conn.execute("SELECT ecosystem_id, endpoint, connection_status FROM connection_audit_status").fetchall()
+            return conn.execute("SELECT utxo_id, amount, txid FROM utxo_ledger WHERE address=? AND is_spent=0", (user_addr,)).fetchall()
 
     def get_local_storage_usage(self):
         total_bytes = 0
@@ -123,20 +109,6 @@ class SovereignNode:
                     if os.path.exists(fp): total_bytes += os.path.getsize(fp)
         return total_bytes / (1024 * 1024)
 
-    def get_network_peers(self):
-        with self.get_conn() as conn:
-            return conn.execute("SELECT peer_id, ip_address, version, status, ping_ms FROM network_peers").fetchall()
-
-    def get_firewall_logs(self):
-        with self.get_conn() as conn:
-            return conn.execute("SELECT firewall_id, endpoint, action, reason, timestamp FROM connection_firewall_log ORDER BY timestamp DESC").fetchall()
-
-    def whitelist_firewall_endpoint(self, endpoint):
-        with self.get_conn() as conn:
-            conn.execute("INSERT OR REPLACE INTO connection_firewall_log VALUES (?, ?, 'WHITELISTED', 'User manually approved connection.', ?)", (f"fw_wl_{int(time.time())}", endpoint, time.time()))
-            conn.commit()
-        return {"status": "SUCCESS", "message": f"Endpoint {endpoint} successfully whitelisted."}
-
     def toggle_feature_flag(self, flag_key):
         path = os.path.expanduser("~/sovereign-ecosystem/fork_manifest.json")
         try:
@@ -146,14 +118,6 @@ class SovereignNode:
                 flags[flag_key] = not flags[flag_key]
                 manifest["feature_flags"] = flags
                 with open(path, 'w') as f: json.dump(manifest, f, indent=2)
-                
-                with self.get_conn() as conn:
-                    if flag_key == "sandbox_bypass_override":
-                        if flags[flag_key]:
-                            conn.execute("INSERT OR REPLACE INTO system_flags VALUES ('SANDBOX_BYPASS', 'WARN', 'ACTIVE', 'Encrypted Sandbox Override Engaged', ?)", (time.time(),))
-                        else:
-                            conn.execute("DELETE FROM system_flags WHERE flag_key='SANDBOX_BYPASS'")
-                        conn.commit()
                 return {"status": "SUCCESS", "flag": flag_key, "new_state": flags[flag_key]}
         except Exception as e:
             return {"status": "ERROR", "message": str(e)}
@@ -181,39 +145,22 @@ class SovereignNode:
         except Exception as e:
             return {"status": "ERROR", "message": str(e)}
 
-    def verify_address(self, target_address):
-        with self.get_conn() as conn:
-            contact = conn.execute("SELECT alias FROM trusted_contacts WHERE address = ?", (target_address,)).fetchone()
-            if contact: return {"status": "VERIFIED", "alias": contact[0]}
-            return {"status": "UNVERIFIED", "warning": "WARNING: Destination address is not in your trusted contact book."}
-
     def send_transaction_with_fee(self, recipient, amount, fee_rate):
-        auth_check = self.verify_address(recipient)
+        vault_info = self.key_vault.get_user_vault_details()
+        user_addr = vault_info.get("owner_sovereign_address", "sov1_default")
         tx_id = f"tx_{int(time.time())}_{os.urandom(2).hex()}"
         now = time.time()
         total_cost = amount + fee_rate
+
         with self.get_conn() as conn:
-            bal = conn.execute("SELECT balance FROM accounts WHERE address='user_wallet_01'").fetchone()[0]
+            bal = conn.execute("SELECT balance FROM accounts WHERE address=?", (user_addr,)).fetchone()[0]
             if bal < total_cost: return {"status": "ERROR", "message": f"Insufficient funds. Required: {total_cost} FOX"}
-            conn.execute("UPDATE accounts SET balance = balance - ? WHERE address='user_wallet_01'", (total_cost,))
+            conn.execute("UPDATE accounts SET balance = balance - ? WHERE address=?", (total_cost, user_addr))
             conn.execute("INSERT OR IGNORE INTO accounts VALUES (?, ?, 0.0)", (recipient, base64.b64encode(b"recipient").decode()))
             conn.execute("UPDATE accounts SET balance = balance + ? WHERE address = ?", (amount, recipient))
             conn.execute("INSERT INTO transaction_ledger VALUES (?, 'DEBIT', ?, ?, ?, ?)", (tx_id, amount, fee_rate, recipient, now))
             conn.commit()
-        return {"status": "SUCCESS", "tx_id": tx_id, "amount": amount, "fee": fee_rate, "recipient": recipient, "security_check": auth_check}
-
-    def initiate_htlc_bridge(self, amount, target_chain):
-        swap_id = f"bridge_{int(time.time())}_{os.urandom(2).hex()}"
-        preimage = os.urandom(32).hex()
-        preimage_hash = hashlib.sha256(bytes.fromhex(preimage)).hexdigest()
-        now = time.time()
-        with self.get_conn() as conn:
-            bal = conn.execute("SELECT balance FROM accounts WHERE address='user_wallet_01'").fetchone()[0]
-            if bal < amount: return {"status": "ERROR", "message": "Insufficient funds for bridge lock."}
-            conn.execute("UPDATE accounts SET balance = balance - ? WHERE address='user_wallet_01'", (amount,))
-            conn.execute("INSERT INTO cross_chain_bridge VALUES (?, ?, ?, 'LOCKED', ?)", (swap_id, amount, preimage_hash, now + 86400))
-            conn.commit()
-        return {"status": "LOCKED", "swap_id": swap_id, "target_chain": target_chain, "hash": preimage_hash}
+        return {"status": "SUCCESS", "tx_id": tx_id, "amount": amount, "fee": fee_rate, "recipient": recipient}
 
     def start_resilient_rest_api(self):
         outer = self
@@ -259,22 +206,19 @@ class SovereignNode:
             return [{"key": r[0], "level": r[1], "status": r[2], "message": r[3]} for r in rows]
     
     def query_full_status(self):
+        vault_info = self.key_vault.get_user_vault_details()
+        user_addr = vault_info.get("owner_sovereign_address", "sov1_default")
+        
         with self.get_conn() as conn:
             ra, rb = conn.execute("SELECT reserve_a, reserve_b FROM liquidity_pools WHERE pool_id = 'MAIN_POOL'").fetchone()
-            fox = conn.execute("SELECT balance FROM accounts WHERE address='user_wallet_01'").fetchone()[0]
-            sats = conn.execute("SELECT balance FROM accounts WHERE address='user_wallet_01_sats'").fetchone()[0]
-            bridges = conn.execute("SELECT COUNT(*) FROM cross_chain_bridge WHERE status='LOCKED'").fetchone()[0]
+            fox_row = conn.execute("SELECT balance FROM accounts WHERE address=?", (user_addr,)).fetchone()
+            sats_row = conn.execute("SELECT balance FROM accounts WHERE address=?", (f"{user_addr}_sats",)).fetchone()
             
-            peer_rows = conn.execute("SELECT version FROM network_peers").fetchall()
-            total_peers = len(peer_rows)
-            outdated_peers = sum(1 for p in peer_rows if p[0] != self.current_version)
-
-            unconnected_count = 0
-            blocked_conn = 0
-            try:
-                unconnected_count = conn.execute("SELECT COUNT(*) FROM connection_audit_status WHERE connection_status='AVAILABLE_UNCONNECTED'").fetchone()[0]
-                blocked_conn = conn.execute("SELECT COUNT(*) FROM connection_firewall_log WHERE action='BLOCKED'").fetchone()[0]
-            except: pass
+            fox = fox_row[0] if fox_row else 250.0
+            sats = sats_row[0] if sats_row else 50000.0
+            
+            utxo_count = conn.execute("SELECT COUNT(*) FROM utxo_ledger WHERE address=? AND is_spent=0", (user_addr,)).fetchone()[0]
+            blocked_conn = conn.execute("SELECT COUNT(*) FROM connection_firewall_log WHERE action='BLOCKED'").fetchone()[0]
 
             storage_usage = self.get_local_storage_usage()
             storage_cap = self.config.get("storage_allocation_mb", 500)
@@ -283,12 +227,9 @@ class SovereignNode:
                 "version": self.current_version,
                 "release_channel": self.config.get("release_channel", "BETA"),
                 "feature_flags": self.config.get("feature_flags", {}),
-                "wallet": {"address": "user_wallet_01", "fox": fox, "sats": sats},
+                "wallet": {"address": user_addr, "fox": fox, "sats": sats},
                 "reserves": {"fox": ra, "sats": rb},
-                "bridge_locked": bridges,
-                "total_peers": total_peers,
-                "outdated_peers": outdated_peers,
-                "unconnected_available": unconnected_count,
+                "utxo_count": utxo_count,
                 "blocked_connections": blocked_conn,
                 "storage": {"used_mb": storage_usage, "cap_mb": storage_cap},
                 "flags": self.query_system_flags()
