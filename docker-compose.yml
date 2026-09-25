@@ -1,0 +1,16 @@
+services:
+  sovereign-core:
+    build: .
+    container_name: sovereign-core-node
+    restart: unless-stopped
+    volumes:
+      - node_stack_data:/root/node-stack
+      - ./backups:/app/backups
+      - ./mail:/app/mail
+    environment:
+      - SOVEREIGN_ENV=CONTAINERIZED_BETA
+    stdin_open: true
+    tty: true
+
+volumes:
+  node_stack_data:

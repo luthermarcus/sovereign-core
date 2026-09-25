@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import os, json, sqlite3, hashlib, time, socket, threading, base64
+import os, json, sqlite3, hashlib, time, socket, threading, base64, glob
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 def load_manifest():
@@ -11,7 +11,7 @@ def load_manifest():
 class SovereignNode:
     def __init__(self):
         self.config = load_manifest()
-        self.db_path = os.path.expanduser(self.config.get("db_path", "~/node-stack/sovereign_os_v285.db"))
+        self.db_path = os.path.expanduser(self.config.get("db_path", "~/node-stack/sovereign_os_v295.db"))
         self.backup_dir = os.path.expanduser("~/sovereign-ecosystem/backups")
         self.media_dir = os.path.expanduser("~/sovereign-ecosystem/media_cache")
         self.mail_dir = os.path.expanduser("~/sovereign-ecosystem/mail")
@@ -19,10 +19,10 @@ class SovereignNode:
         self.vault_path = os.path.expanduser("~/sovereign-ecosystem/vault/master.key")
         self.auth_cookie_path = os.path.expanduser("~/sovereign-ecosystem/vault/rpc_auth.cookie")
         self.bound_rest_port = None
-        self.current_version = "v2.8.5-beta"
+        self.current_version = "v2.9.5-beta"
 
         self._init_security_vaults()
-        self.run_autonomous_diagnostics_and_pruning()
+        self.run_adaptive_diagnostics_and_pruning()
         self.start_resilient_rest_api()
         self.start_autonomous_watchdog()
 
@@ -35,17 +35,18 @@ class SovereignNode:
         self.api_token = os.urandom(32).hex()
         with open(self.auth_cookie_path, 'w') as f: f.write(f"sov_rpc:{self.api_token}")
 
-    def get_conn(self):
-        os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
-        conn = sqlite3.connect(self.db_path)
+    def get_conn(self, target_path=None):
+        path = target_path or self.db_path
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        conn = sqlite3.connect(path)
         conn.execute("PRAGMA journal_mode = WAL;")
         conn.execute("PRAGMA synchronous = NORMAL;")
         conn.execute("PRAGMA mmap_size = 268435456;")
         conn.execute("PRAGMA temp_store = MEMORY;")
         return conn
 
-    def run_autonomous_diagnostics_and_pruning(self):
-        os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
+    def run_adaptive_diagnostics_and_pruning(self):
+        os.makedirs(os.path.expanduser("~/node-stack"), exist_ok=True)
         os.makedirs(self.media_dir, exist_ok=True)
         os.makedirs(self.mail_dir, exist_ok=True)
         os.makedirs(self.modules_dir, exist_ok=True)
@@ -63,12 +64,16 @@ class SovereignNode:
             conn.execute("CREATE TABLE IF NOT EXISTS media_registry (track_id TEXT PRIMARY KEY, title TEXT, artist TEXT, ipfs_hash TEXT, size_mb REAL, downloaded INTEGER)")
             conn.execute("CREATE TABLE IF NOT EXISTS web3_mail (mail_id TEXT PRIMARY KEY, sender TEXT, subject TEXT, body TEXT, timestamp REAL, is_read INTEGER)")
             conn.execute("CREATE TABLE IF NOT EXISTS developer_plugins (plugin_id TEXT PRIMARY KEY, name TEXT, entrypoint TEXT, status TEXT)")
+            conn.execute("CREATE TABLE IF NOT EXISTS connection_firewall_log (firewall_id TEXT PRIMARY KEY, endpoint TEXT, action TEXT, reason TEXT, timestamp REAL)")
+            conn.execute("CREATE TABLE IF NOT EXISTS network_stress_alerts (alert_id TEXT PRIMARY KEY, peer_id TEXT, signal_type TEXT, status TEXT, timestamp REAL)")
 
             if channel in ["BETA", "SIMULATION", "DEV"]:
                 conn.execute("CREATE TABLE IF NOT EXISTS beta_telemetry_feedback (feedback_id TEXT PRIMARY KEY, subsystem TEXT, comments TEXT, status TEXT, timestamp REAL)")
-                conn.execute("INSERT OR IGNORE INTO beta_telemetry_feedback VALUES ('fb_init', '[Core Engine]', 'All methods restored in v2.8.5.', 'OPEN', ?)", (time.time(),))
+                conn.execute("INSERT OR IGNORE INTO beta_telemetry_feedback VALUES ('fb_init', '[Master Gateway]', 'Unified interoperability active in v2.9.5.', 'OPEN', ?)", (time.time(),))
             else:
                 conn.execute("DROP TABLE IF EXISTS beta_telemetry_feedback;")
+                conn.execute("DROP TABLE IF EXISTS connection_firewall_log;")
+                conn.execute("DROP TABLE IF EXISTS network_stress_alerts;")
 
             # Seed default data
             conn.execute("INSERT OR IGNORE INTO accounts VALUES ('user_wallet_01', ?, 250.0)", (base64.b64encode(b"user").decode(),))
@@ -79,62 +84,49 @@ class SovereignNode:
             conn.execute("INSERT OR IGNORE INTO developer_plugins VALUES ('plugin_sandbox_01', 'Core Debugger', 'debug.py', 'ACTIVE')")
             
             now = time.time()
-            conn.execute("INSERT OR IGNORE INTO network_peers VALUES ('peer_node_alpha', '10.0.0.1', 'v2.8.5-beta', 'ACTIVE', 12.5, 0, ?)", (now,))
+            conn.execute("INSERT OR IGNORE INTO network_peers VALUES ('peer_node_alpha', '10.0.0.1', 'v2.9.5-beta', 'ACTIVE', 12.5, 0, ?)", (now,))
             conn.execute("INSERT OR IGNORE INTO network_peers VALUES ('peer_node_beta', '10.0.0.2', 'v2.7.4', 'OUTDATED', 18.2, 0, ?)", (now,))
-            
+            conn.execute("INSERT OR IGNORE INTO connection_firewall_log VALUES ('fw_sample_01', '198.51.100.42:9050', 'BLOCKED', 'Untrusted external scraper IP blocked by Sovereign Firewall.', ?)", (now - 300,))
+            conn.execute("INSERT OR IGNORE INTO network_stress_alerts VALUES ('alert_peer_alpha', 'peer_node_alpha', 'STRESS_TEST_SIGNAL', 'NOTIFIED', ?)", (now,))
             conn.execute("INSERT OR IGNORE INTO transaction_ledger VALUES ('tx_genesis', 'CREDIT', 250.0, 1.0, 'Network Faucet', ?)", (now - 3600,))
             conn.commit()
 
-    def get_local_storage_usage(self):
-        total_bytes = 0
-        paths = [self.db_path, self.backup_dir, self.media_dir, self.mail_dir, self.modules_dir]
-        for p in paths:
-            if os.path.isfile(p): total_bytes += os.path.getsize(p)
-            elif os.path.isdir(p):
-                for root, dirs, files in os.walk(p):
-                    for f in files:
-                        fp = os.path.join(root, f)
-                        if os.path.exists(fp): total_bytes += os.path.getsize(fp)
-        return total_bytes / (1024 * 1024)
-
-    # --- RESTORED HELPER METHODS ---
-    def send_encrypted_mail(self, recipient, subject, body):
-        mail_id = f"mail_{int(time.time())}_{os.urandom(2).hex()}"
+    def broadcast_stress_signal_to_peers(self):
         now = time.time()
         with self.get_conn() as conn:
-            conn.execute("INSERT INTO web3_mail VALUES (?, ?, ?, ?, ?, 0)", (mail_id, recipient, subject, body, now))
+            peers = conn.execute("SELECT peer_id FROM network_peers WHERE status='ACTIVE'").fetchall()
+            count = 0
+            for p in peers:
+                peer_id = p[0]
+                alert_id = f"alert_{int(now)}_{os.urandom(2).hex()}"
+                conn.execute("INSERT OR REPLACE INTO network_stress_alerts VALUES (?, ?, 'STRESS_TEST_SIGNAL', 'BROADCASTED', ?)", (alert_id, peer_id, now))
+                count += 1
             conn.commit()
-        return {"status": "SUCCESS", "mail_id": mail_id, "recipient": recipient}
+        return {"status": "SUCCESS", "notified_peers": count, "message": f"Broadcasted stress test notification to {count} active peers."}
 
-    def get_inbox_messages(self):
-        with self.get_conn() as conn:
-            return conn.execute("SELECT mail_id, sender, subject, body, timestamp, is_read FROM web3_mail ORDER BY timestamp DESC").fetchall()
-
-    def get_media_catalog(self):
-        with self.get_conn() as conn:
-            return conn.execute("SELECT track_id, title, artist, ipfs_hash, size_mb, downloaded FROM media_registry").fetchall()
-
-    def download_media_track(self, track_id):
-        with self.get_conn() as conn:
-            row = conn.execute("SELECT title, artist FROM media_registry WHERE track_id = ?", (track_id,)).fetchone()
-            if not row: return {"status": "ERROR", "message": "Track not found."}
-            conn.execute("UPDATE media_registry SET downloaded = 1 WHERE track_id = ?", (track_id,))
-            conn.commit()
-            fake_file = os.path.join(self.media_dir, f"{track_id}.mp3")
-            with open(fake_file, 'w') as f: f.write("DECENTRALIZED_AUDIO_STREAM_DATA")
-        return {"status": "SUCCESS", "track": row[0], "artist": row[1], "path": fake_file}
+    def get_local_storage_usage(self):
+        total_bytes = 0
+        stack_dir = os.path.expanduser("~/node-stack")
+        if os.path.isdir(stack_dir):
+            for root, dirs, files in os.walk(stack_dir):
+                for f in files:
+                    fp = os.path.join(root, f)
+                    if os.path.exists(fp): total_bytes += os.path.getsize(fp)
+        return total_bytes / (1024 * 1024)
 
     def get_network_peers(self):
         with self.get_conn() as conn:
             return conn.execute("SELECT peer_id, ip_address, version, status, ping_ms FROM network_peers").fetchall()
 
-    def broadcast_update_signal_to_outdated(self):
+    def get_firewall_logs(self):
         with self.get_conn() as conn:
-            outdated = conn.execute("SELECT peer_id, version FROM network_peers WHERE version != ?", (self.current_version,)).fetchall()
-            for peer_id, ver in outdated:
-                conn.execute("UPDATE network_peers SET status = 'UPDATE_SIGNALED' WHERE peer_id = ?", (peer_id,))
+            return conn.execute("SELECT firewall_id, endpoint, action, reason, timestamp FROM connection_firewall_log ORDER BY timestamp DESC").fetchall()
+
+    def whitelist_firewall_endpoint(self, endpoint):
+        with self.get_conn() as conn:
+            conn.execute("INSERT OR REPLACE INTO connection_firewall_log VALUES (?, ?, 'WHITELISTED', 'User manually approved connection.', ?)", (f"fw_wl_{int(time.time())}", endpoint, time.time()))
             conn.commit()
-        return {"status": "SUCCESS", "signaled_count": len(outdated), "message": f"Broadcast update signal for {self.current_version} to outdated peers."}
+        return {"status": "SUCCESS", "message": f"Endpoint {endpoint} successfully whitelisted."}
 
     def toggle_feature_flag(self, flag_key):
         path = os.path.expanduser("~/sovereign-ecosystem/fork_manifest.json")
@@ -150,21 +142,6 @@ class SovereignNode:
             return {"status": "ERROR", "message": str(e)}
         return {"status": "NOT_FOUND"}
 
-    def submit_pinpointed_suggestion(self, subsystem, comments):
-        feedback_id = f"fb_{int(time.time())}_{os.urandom(2).hex()}"
-        now = time.time()
-        with self.get_conn() as conn:
-            conn.execute("INSERT INTO beta_telemetry_feedback VALUES (?, ?, ?, 'OPEN', ?)", (feedback_id, subsystem, comments, now))
-            conn.commit()
-        return {"status": "SUCCESS", "message": f"Suggestion pinpointed to {subsystem} successfully!"}
-
-    def get_all_feedback(self):
-        with self.get_conn() as conn:
-            try:
-                return conn.execute("SELECT feedback_id, subsystem, comments, status, timestamp FROM beta_telemetry_feedback ORDER BY timestamp DESC").fetchall()
-            except sqlite3.OperationalError:
-                return []
-
     def execute_custom_sql(self, query):
         with self.get_conn() as conn:
             try:
@@ -176,10 +153,6 @@ class SovereignNode:
                     return {"status": "SUCCESS", "message": "Query executed successfully."}
             except Exception as e:
                 return {"status": "ERROR", "message": str(e)}
-
-    def get_loaded_plugins(self):
-        with self.get_conn() as conn:
-            return conn.execute("SELECT plugin_id, name, entrypoint, status FROM developer_plugins").fetchall()
 
     def create_live_backup(self):
         os.makedirs(self.backup_dir, exist_ok=True)
@@ -274,11 +247,17 @@ class SovereignNode:
             fox = conn.execute("SELECT balance FROM accounts WHERE address='user_wallet_01'").fetchone()[0]
             sats = conn.execute("SELECT balance FROM accounts WHERE address='user_wallet_01_sats'").fetchone()[0]
             bridges = conn.execute("SELECT COUNT(*) FROM cross_chain_bridge WHERE status='LOCKED'").fetchone()[0]
-            plugin_count = conn.execute("SELECT COUNT(*) FROM developer_plugins WHERE status='ACTIVE'").fetchone()[0]
             
             peer_rows = conn.execute("SELECT version FROM network_peers").fetchall()
             total_peers = len(peer_rows)
             outdated_peers = sum(1 for p in peer_rows if p[0] != self.current_version)
+
+            blocked_conn = 0
+            notified_stress = 0
+            try:
+                blocked_conn = conn.execute("SELECT COUNT(*) FROM connection_firewall_log WHERE action='BLOCKED'").fetchone()[0]
+                notified_stress = conn.execute("SELECT COUNT(*) FROM network_stress_alerts").fetchone()[0]
+            except: pass
 
             storage_usage = self.get_local_storage_usage()
             storage_cap = self.config.get("storage_allocation_mb", 500)
@@ -288,10 +267,12 @@ class SovereignNode:
                 "release_channel": self.config.get("release_channel", "BETA"),
                 "feature_flags": self.config.get("feature_flags", {}),
                 "wallet": {"address": "user_wallet_01", "fox": fox, "sats": sats},
-                "reserves": {"fox": ra, "sats": rb},
+                "reserves": {"fox": ra, "sats": sats},
                 "bridge_locked": bridges,
                 "total_peers": total_peers,
                 "outdated_peers": outdated_peers,
+                "blocked_connections": blocked_conn,
+                "stress_notified_peers": notified_stress,
                 "storage": {"used_mb": storage_usage, "cap_mb": storage_cap},
                 "flags": self.query_system_flags()
             }
