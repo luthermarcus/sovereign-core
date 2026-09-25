@@ -1,12 +1,12 @@
 {
   "network_name": "Sovereign OS",
-  "version": "v2.9.5-beta",
+  "version": "v2.9.6-beta",
   "base_ticker": "FOX",
   "quote_ticker": "SATS",
-  "db_path": "~/node-stack/sovereign_os_v295.db",
+  "db_path": "~/node-stack/sovereign_os_v296.db",
   "primary_rest_port": 8080,
   "release_channel": "BETA",
-  "dashboard_mode": "MASTER_SECURE_GATEWAY",
+  "dashboard_mode": "SECURE_GATEWAY_WITH_BYPASS",
   "max_price_impact_percent": 2.0,
   "storage_allocation_mb": 500,
   "feature_flags": {
@@ -14,11 +14,10 @@
     "p2p_auto_update_signaling": true,
     "connection_firewall_enabled": true,
     "peer_stress_notifications": true,
-    "hardware_adaptive_benchmarks": true,
-    "encrypted_gossip_sync": true
+    "sandbox_bypass_override": false
   },
   "roadmap": {
-    "current_phase": "Phase XXV: Master Unified Gateway & Production Readiness",
+    "current_phase": "Phase XXVI: Encrypted Sandbox Override & Visible Security Flags",
     "next_milestone": "v3.0.0 Mainnet Regtest Candidate & Security Audit",
     "target_release": "Q3 2026",
     "community_governance": "BIP 9 Versionbits Signaling Active"
