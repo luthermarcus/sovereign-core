@@ -1,0 +1,12 @@
+# Ignore all SQLite databases and Write-Ahead Logs
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+
+# Ignore the backup directory
+backups/
+
+# Ignore embedded nested repositories
+sovereign-depin-core/
