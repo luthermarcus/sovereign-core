@@ -1,12 +1,12 @@
 {
   "network_name": "Sovereign OS",
-  "version": "v2.9.12-beta",
+  "version": "v2.9.13-beta",
   "base_ticker": "FOX",
   "quote_ticker": "SATS",
-  "db_path": "~/node-stack/sovereign_os_v2912.db",
+  "db_path": "~/node-stack/sovereign_os_v2913.db",
   "primary_rest_port": 8080,
   "release_channel": "BETA",
-  "dashboard_mode": "FULL_WALLET_WITH_UTXO_AND_GUIDANCE",
+  "dashboard_mode": "PRODUCTION_HARDENED_VAULT",
   "max_price_impact_percent": 2.0,
   "storage_allocation_mb": 500,
   "feature_flags": {
@@ -23,7 +23,7 @@
     "encrypted_gossip_sync": true
   },
   "roadmap": {
-    "current_phase": "Phase XXXII: UTXO Coin Control, Fee Estimation & Interactive Guidance",
+    "current_phase": "Phase XXXIII: Production Hardening, Key Vaults & Automated Test Pre-Checks",
     "next_milestone": "v3.0.0 Mainnet Regtest Candidate & Security Audit",
     "target_release": "Q3 2026",
     "community_governance": "BIP 9 Versionbits Signaling Active"

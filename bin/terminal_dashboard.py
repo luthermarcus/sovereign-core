@@ -29,7 +29,7 @@ def display_main_header():
 
     active_flags = [f for f in flags if f["status"] == "ACTIVE"]
     if not active_flags:
-        tbl.add_row("--- [bold yellow]📡 Security & Guidance Flags[/bold yellow] ---", "---")
+        tbl.add_row("--- [bold yellow]📡 Security & Production Gateway[/bold yellow] ---", "---")
         tbl.add_row("System Integrity", "[bold green]● ALL WAL TABLES SECURE[/bold green]")
     else:
         for f in active_flags:
@@ -129,7 +129,6 @@ if __name__ == "__main__":
                     input("\nPress [Enter] to return...")
                 elif choice == "3":
                     console.clear()
-                    plugins = node.get_loaded_plugins() if hasattr(node, 'get_loaded_plugins') else []
                     rprint(Panel("[bold cyan]Plugins Loaded[/bold cyan]", title="[Plugins]", border_style="yellow"))
                     input("\nPress [Enter] to return...")
                 elif choice == "4":
@@ -151,7 +150,7 @@ if __name__ == "__main__":
                 
                 if choice == "1":
                     console.clear()
-                    rprint(Panel("[bold]Current Phase:[/bold] Phase XXXII: UTXO Coin Control & Guidance Flags", title="Roadmap", border_style="cyan"))
+                    rprint(Panel("[bold]Current Phase:[/bold] Phase XXXIII: Production Hardening & Pre-Checks", title="Roadmap", border_style="cyan"))
                     input("\nPress [Enter] to return...")
                 elif choice == "2":
                     toggle_release_channel()

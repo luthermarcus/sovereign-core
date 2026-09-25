@@ -14,7 +14,7 @@ def load_manifest():
 class SovereignNode:
     def __init__(self):
         self.config = load_manifest()
-        self.db_path = os.path.expanduser(self.config.get("db_path", "~/node-stack/sovereign_os_v2912.db"))
+        self.db_path = os.path.expanduser(self.config.get("db_path", "~/node-stack/sovereign_os_v2913.db"))
         self.backup_dir = os.path.expanduser("~/sovereign-ecosystem/backups")
         self.media_dir = os.path.expanduser("~/sovereign-ecosystem/media_cache")
         self.mail_dir = os.path.expanduser("~/sovereign-ecosystem/mail")
@@ -22,7 +22,7 @@ class SovereignNode:
         self.vault_path = os.path.expanduser("~/sovereign-ecosystem/vault/master.key")
         self.auth_cookie_path = os.path.expanduser("~/sovereign-ecosystem/vault/rpc_auth.cookie")
         self.bound_rest_port = None
-        self.current_version = "v2.9.12-beta"
+        self.current_version = "v2.9.13-beta"
 
         self.key_vault = SelfCustodyKeyVault()
         self._init_security_vaults()
@@ -89,7 +89,7 @@ class SovereignNode:
             conn.execute("INSERT OR IGNORE INTO trusted_contacts VALUES ('0xVerifiedColdStorage', 'Primary Vault')")
             
             now = time.time()
-            conn.execute("INSERT OR IGNORE INTO network_peers VALUES ('peer_node_alpha', '10.0.0.1', 'v2.9.12-beta', 'ACTIVE', 12.5, 0, ?)", (now,))
+            conn.execute("INSERT OR IGNORE INTO network_peers VALUES ('peer_node_alpha', '10.0.0.1', 'v2.9.13-beta', 'ACTIVE', 12.5, 0, ?)", (now,))
             conn.execute("INSERT OR IGNORE INTO connection_firewall_log VALUES ('fw_sample_01', '198.51.100.42:9050', 'BLOCKED', 'Untrusted external scraper IP blocked by Sovereign Firewall.', ?)", (now - 300,))
             conn.commit()
 
