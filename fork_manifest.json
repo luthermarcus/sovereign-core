@@ -1,16 +1,22 @@
 {
   "network_name": "Sovereign OS",
-  "version": "v2.8.1-beta",
+  "version": "v2.8.5-beta",
   "base_ticker": "FOX",
   "quote_ticker": "SATS",
-  "db_path": "~/node-stack/sovereign_os_v281.db",
+  "db_path": "~/node-stack/sovereign_os_v285.db",
   "primary_rest_port": 8080,
   "release_channel": "BETA",
-  "dashboard_mode": "COMMUNITY_FEEDBACK_SANDBOX",
+  "dashboard_mode": "COMMUNITY_COMPLETE_REGISTRY",
   "max_price_impact_percent": 2.0,
   "storage_allocation_mb": 500,
+  "feature_flags": {
+    "beta_telemetry_enabled": false,
+    "p2p_auto_update_signaling": true,
+    "sandbox_simulation_harness": true,
+    "encrypted_mail_bridge": true
+  },
   "roadmap": {
-    "current_phase": "Phase XII: Self-Pruning Beta Telemetry & Community Feedback",
+    "current_phase": "Phase XV: Complete Method Restoration & Full System Verification",
     "next_milestone": "v3.0.0 Mainnet Regtest Candidate & Security Audit",
     "target_release": "Q3 2026",
     "community_governance": "BIP 9 Versionbits Signaling Active"

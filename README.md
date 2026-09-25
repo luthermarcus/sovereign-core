@@ -1,9 +1,9 @@
-# Sovereign Core (v2.8.1-beta)
+# Sovereign Core (v2.8.5-beta)
 
 Ultra-lightweight, hardware-adaptive Bitcoin and DePIN settlement micro-OS layer operated via mobile Termux or Linux terminals.
 
-## What's New in v2.8.1-beta
-- **Self-Pruning Beta Telemetry:** Automatically records community feedback and diagnostic flags during beta testing, with automated database table pruning (`DROP TABLE IF EXISTS`) when transitioning to LIVE/Mainnet production.
-- **Community Feedback Portal:** Dedicated TUI submenu enabling developers and testers to log system improvement ideas, bug reports, and feature requests directly into local SQLite WAL storage.
-- **App Simulation Harness:** Interactive test suite simulating high-frequency transaction loads, P2P peer handshake latency, and storage cap guard stress tests.
-- **Resilient SQLite WAL Architecture:** Memory-mapped I/O (`mmap_size`), ACID compliance, and autonomous boot diagnostics.
+## What's New in v2.8.5-beta
+- **Complete Method Restoration & Full System Verification:** 17-point automated test runner covering all core subsystems.
+- **P2P Build Version Signaling & Outdated Peer Tracking:** Gossip protocols tracking node software versions across local mesh networks.
+- **Beta Options Manual & Feature Flag Toggles:** Dynamic runtime toggling of telemetry and simulation suites with automated live-channel self-pruning.
+- **Community Suggestion & Issue Matrix:** Subsystem-pinpointed feedback integration directly on the primary TUI dashboard.
