@@ -1,0 +1,10 @@
+services:
+  honeygain:
+    image: honeygain/honeygain:latest
+    container_name: honeygain
+    restart: unless-stopped
+    command: ["-tou-accept", "-email", "Marioskiba@gmail.com", "-pass", "DeadAsh35433", "-device", "luther"]
+    deploy:
+      resources:
+        limits:
+          memory: 256M

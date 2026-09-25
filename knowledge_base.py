@@ -9,12 +9,13 @@ class ProtocolKnowledgeBase:
     def __init__(self, db_path="/home/luther/node-stack/ecosystem_metrics.db"):
         self.db_path = db_path
         self._init_db()
-        # Swapped AppArmor for the ERC-4337 Bundler node tracker
+        # Expanded to monitor DEX and Omnichain smart contract repositories
         self.TARGET_REPOS = [
             "eth-infinitism/account-abstraction", 
             "eth-infinitism/bundler",               
-            "ethereum/go-ethereum",               
-            "mysteriumnetwork/node"
+            "mysteriumnetwork/node",
+            "Uniswap/v3-core",
+            "LayerZero-Labs/LayerZero"
         ]
 
     def _init_db(self):
@@ -35,7 +36,7 @@ class ProtocolKnowledgeBase:
         conn.close()
 
     def fetch_upstream_intelligence(self):
-        print("\n\033[95m=== SOVEREIGN KNOWLEDGE BASE: UPSTREAM RECON ===\033[0m")
+        print("\n\033[95m=== SOVEREIGN KNOWLEDGE BASE: DEFI & CORE RECON ===\033[0m")
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
 
@@ -59,7 +60,6 @@ class ProtocolKnowledgeBase:
                         if stable_tag != "None" and pre_tag != "None":
                             break
 
-                    # FIX: Prevent flagging old betas if the stable version is newer
                     if pre_date != "N/A" and stable_date != "N/A":
                         if pre_date <= stable_date:
                             pre_tag = "None"
@@ -75,7 +75,7 @@ class ProtocolKnowledgeBase:
                     print(f"\033[96m[{repo}]\033[0m")
                     print(f"  └── STABLE      : \033[92m{stable_tag}\033[0m ({stable_date})")
                     if pre_tag != "None":
-                        print(f"  └── PRE-RELEASE : \033[93m{pre_tag}\033[0m ({pre_date} - \033[91mFLAGGED FOR PREP\033[0m)")
+                        print(f"  └── PRE-RELEASE : \033[93m{pre_tag}\033[0m ({pre_date} - \033[91mFLAGGED\033[0m)")
                     else:
                         print("  └── PRE-RELEASE : None active")
 
@@ -85,7 +85,7 @@ class ProtocolKnowledgeBase:
             time.sleep(1)
 
         conn.close()
-        print("\033[95m================================================\033[0m\n")
+        print("\033[95m===================================================\033[0m\n")
 
 if __name__ == "__main__":
     recon = ProtocolKnowledgeBase()
